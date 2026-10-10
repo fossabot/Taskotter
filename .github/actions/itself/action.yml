@@ -27,6 +27,7 @@ inputs:
       adrs
       hadolint
       trivy
+      rumdl
   js:
     description: JavaScript runtime configuration
     required: false
