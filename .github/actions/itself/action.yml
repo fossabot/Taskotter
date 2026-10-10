@@ -12,7 +12,7 @@ inputs:
   store-version:
     description: TaskOtter store version
     required: false
-    default: v0.0.12
+    default: v0.0.19
   tasks:
     description: TaskOtter tasks to run
     required: false
@@ -26,6 +26,7 @@ inputs:
       zizmor
       adrs
       hadolint
+      trivy
   js:
     description: JavaScript runtime configuration
     required: false

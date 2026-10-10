@@ -23,20 +23,6 @@ jobs:
         uses: $/.github/actions/itself
         with:
           github-token: ${{ github.token }}
-          fail-on-changes: true
-          store-version: v0.0.12
-          tasks: |
-            go
-            go-junit-report
-            golangci-lint
-            yamllint
-            yamlfix
-            actionlint
-            zizmor
-            adrs
-            hadolint
-          includes-doc: true
-          target-folder: taskotter
       - name: Print result
         if: always()
         shell: bash
