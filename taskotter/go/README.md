@@ -1,6 +1,6 @@
 # Go Taskfile
 
-## What is this Taskfile?
+## What Is This Taskfile?
 
 A Taskfile for running Go unit tests, benchmarks, and fuzz targets. The Go
 toolchain is installed through `nix:install:profile`.
@@ -73,31 +73,31 @@ Pin a revision by overriding the installable, for example
 
 ## Public Tasks
 
-| Task     | Description                          |
-| -------- | ------------------------------------ |
-| `which`  | Show the path to the Go binary       |
-| `verify` | Print Go version, GOROOT, and GOPATH |
-| `test`   | Run Go unit tests                    |
-| `bench`  | Run Go benchmarks                    |
-| `fuzz`   | Run a Go fuzz target                 |
-| `install` | Install Go via Nix (Unix) or WinGet (Windows) |
+| Task          | Description                                       |
+| ------------- | ------------------------------------------------- |
+| `which`       | Show the path to the Go binary                    |
+| `verify`      | Print Go version, GOROOT, and GOPATH              |
+| `test`        | Run Go unit tests                                 |
+| `bench`       | Run Go benchmarks                                 |
+| `fuzz`        | Run a Go fuzz target                              |
+| `install`     | Install Go via Nix (Unix) or WinGet (Windows)     |
 | `install:pkg` | Install a Go package with `go install` (`GO_PKG`) |
-| `version` | Show the active Go version |
+| `version`     | Show the active Go version                        |
 
 ## Variables
 
-| Variable             | Default      | Description                                       |
-| -------------------- | ------------ | ------------------------------------------------- |
-| `GO_NIX_INSTALLABLE` | `nixpkgs#go` | Flake installable passed to `nix:install:profile` |
-| `GO_WINGET_INSTALLABLE` | `GoLang.Go` | WinGet package ID for `winget:install:package` |
-| `GO_FUZZTIME`        | empty (`30s`) | Duration a single `fuzz` target runs before stopping |
-| `GO_PKG`             | empty        | Module path for `install:pkg`; required when running that task |
-| `GO_LOAD`            | reloads User Path; prepends GOPATH\bin | PowerShell snippet so `go`-installed tools from earlier in the same Task process are on PATH |
+| Variable                | Default                                | Description                                                                                  |
+| ----------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `GO_NIX_INSTALLABLE`    | `nixpkgs#go`                           | Flake installable passed to `nix:install:profile`                                            |
+| `GO_WINGET_INSTALLABLE` | `GoLang.Go`                            | WinGet package ID for `winget:install:package`                                               |
+| `GO_FUZZTIME`           | empty (`30s`)                          | Duration a single `fuzz` target runs before stopping                                         |
+| `GO_PKG`                | empty                                  | Module path for `install:pkg`; required when running that task                               |
+| `GO_LOAD`               | reloads User Path; prepends GOPATH\bin | PowerShell snippet so `go`-installed tools from earlier in the same Task process are on PATH |
 
 ## Notes
 
-- Install uses Nix on Linux and macOS (`GO_NIX_INSTALLABLE`) and WinGet on Windows (`GO_WINGET_INSTALLABLE`, default `GoLang.Go`).
+* Install uses Nix on Linux and macOS (`GO_NIX_INSTALLABLE`) and WinGet on Windows (`GO_WINGET_INSTALLABLE`, default `GoLang.Go`).
 
-- `test`, `bench`, `fuzz`, `which`, `verify`, and `install:pkg` auto-install Go.
+* `test`, `bench`, `fuzz`, `which`, `verify`, and `install:pkg` auto-install Go.
 
-- On Windows, `install:pkg` prepends `$(go env GOPATH)\bin` to the User Path when missing.
+* On Windows, `install:pkg` prepends `$(go env GOPATH)\bin` to the User Path when missing.
