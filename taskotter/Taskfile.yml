@@ -48,6 +48,28 @@ vars:
   ZIZMOR_NIX_INSTALLABLE: '{{.ZIZMOR_NIX_INSTALLABLE | default "nixpkgs#zizmor"}}'
   ZIZMOR_TARGETS: '{{.ZIZMOR_TARGETS | default ".github"}}'
   ZIZMOR_WINGET_INSTALLABLE: '{{.ZIZMOR_WINGET_INSTALLABLE | default "zizmor.zizmor"}}'
+  RUMDL_EXTRA_ARGS: '{{.RUMDL_EXTRA_ARGS | default ""}}'
+  RUMDL_NIX_INSTALLABLE: '{{.RUMDL_NIX_INSTALLABLE | default "nixpkgs#rumdl"}}'
+  RUMDL_TARGETS: '{{.RUMDL_TARGETS | default "."}}'
+  RUMDL_WINGET_INSTALLABLE: '{{.RUMDL_WINGET_INSTALLABLE | default "rvben.rumdl"}}'
+  TRIVY_FS_ARGS: >-
+    {{.TRIVY_FS_ARGS | default (printf `--scanners %s
+    --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1
+    --detection-priority comprehensive --ignore-unfixed=false --license-full
+    --include-dev-deps --include-deprecated-checks --no-progress` .TRIVY_SCANNERS)}}
+  TRIVY_FS_EXTRA_ARGS: '{{.TRIVY_FS_EXTRA_ARGS | default ""}}'
+  TRIVY_FS_TARGET: '{{.TRIVY_FS_TARGET | default "."}}'
+  TRIVY_IMAGE: '{{.TRIVY_IMAGE | default ""}}'
+  TRIVY_IMAGE_ARGS: >-
+    {{.TRIVY_IMAGE_ARGS | default (printf `--scanners %s
+    --image-config-scanners misconfig,secret
+    --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --exit-on-eol 1
+    --detection-priority comprehensive --ignore-unfixed=false --license-full
+    --removed-pkgs --include-deprecated-checks --no-progress` .TRIVY_SCANNERS)}}
+  TRIVY_IMAGE_EXTRA_ARGS: '{{.TRIVY_IMAGE_EXTRA_ARGS | default ""}}'
+  TRIVY_NIX_INSTALLABLE: '{{.TRIVY_NIX_INSTALLABLE | default "nixpkgs#trivy"}}'
+  TRIVY_SCANNERS: '{{.TRIVY_SCANNERS | default "vuln,misconfig,secret,license"}}'
+  TRIVY_WINGET_INSTALLABLE: '{{.TRIVY_WINGET_INSTALLABLE | default "AquaSecurity.Trivy"}}'
 includes:
   go:
     taskfile: go/Taskfile.yml
@@ -129,6 +151,27 @@ includes:
       HADOLINT_EXTRA_ARGS: '{{.HADOLINT_EXTRA_ARGS}}'
       HADOLINT_NIX_INSTALLABLE: '{{.HADOLINT_NIX_INSTALLABLE}}'
       HADOLINT_WINGET_INSTALLABLE: '{{.HADOLINT_WINGET_INSTALLABLE}}'
+  trivy:
+    taskfile: trivy/Taskfile.yml
+    dir: ..
+    vars:
+      TRIVY_IMAGE: '{{.TRIVY_IMAGE}}'
+      TRIVY_FS_TARGET: '{{.TRIVY_FS_TARGET}}'
+      TRIVY_SCANNERS: '{{.TRIVY_SCANNERS}}'
+      TRIVY_IMAGE_ARGS: '{{.TRIVY_IMAGE_ARGS}}'
+      TRIVY_FS_ARGS: '{{.TRIVY_FS_ARGS}}'
+      TRIVY_IMAGE_EXTRA_ARGS: '{{.TRIVY_IMAGE_EXTRA_ARGS}}'
+      TRIVY_FS_EXTRA_ARGS: '{{.TRIVY_FS_EXTRA_ARGS}}'
+      TRIVY_NIX_INSTALLABLE: '{{.TRIVY_NIX_INSTALLABLE}}'
+      TRIVY_WINGET_INSTALLABLE: '{{.TRIVY_WINGET_INSTALLABLE}}'
+  rumdl:
+    taskfile: rumdl/Taskfile.yml
+    dir: ..
+    vars:
+      RUMDL_TARGETS: '{{.RUMDL_TARGETS}}'
+      RUMDL_EXTRA_ARGS: '{{.RUMDL_EXTRA_ARGS}}'
+      RUMDL_NIX_INSTALLABLE: '{{.RUMDL_NIX_INSTALLABLE}}'
+      RUMDL_WINGET_INSTALLABLE: '{{.RUMDL_WINGET_INSTALLABLE}}'
 tasks:
   ci:
     desc: Run ci for synced TaskOtter modules
@@ -138,11 +181,13 @@ tasks:
       - task: actionlint:ci
       - task: zizmor:ci
       - task: hadolint:ci
+      - task: rumdl:ci
   ci:fix:
     desc: Run ci:fix for synced TaskOtter modules
     cmds:
       - task: golangci-lint:ci:fix
       - task: yamlfix:ci:fix
+      - task: rumdl:ci:fix
   install:
     desc: Run install for synced TaskOtter modules
     cmds:
@@ -155,6 +200,8 @@ tasks:
       - task: zizmor:install
       - task: adrs:install
       - task: hadolint:install
+      - task: trivy:install
+      - task: rumdl:install
   verify:
     desc: Run verify for synced TaskOtter modules
     cmds:
@@ -172,6 +219,8 @@ tasks:
       - task: zizmor:version
       - task: adrs:version
       - task: hadolint:version
+      - task: trivy:version
+      - task: rumdl:version
   which:
     desc: Run which for synced TaskOtter modules
     cmds:
