@@ -5,6 +5,7 @@ package reporting_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,12 +106,14 @@ func TestResolvedTaskMarshalJSON(t *testing.T) {
 		Path:              "taskfiles/eslint",
 	}
 
-	data, err := task.MarshalJSON()
+	var buffer bytes.Buffer
+
+	err := json.NewEncoder(&buffer).Encode(task)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	assertContainsAll(t, string(data), []string{
+	assertContainsAll(t, buffer.String(), []string{
 		`"source_module":"eslint/node/pnpm"`,
 		`"destination_module":"eslint"`,
 		`"path":"taskfiles/eslint"`,
@@ -235,41 +238,33 @@ func emptyRefInfo() storedomain.RefInfo {
 
 func emptyResult() *rundomain.Result {
 	return &rundomain.Result{
-		ResolvedOutput: rundomain.ResolvedOutput{
-			ResolvedTasksJSON:    consts.Empty,
-			ResolvedDependencies: consts.Empty,
-		},
-		PullRequestOutput: rundomain.PullRequestOutput{
-			PullRequestNumber: consts.Empty,
-			PullRequestURL:    consts.Empty,
-		},
-		Changed:      false,
-		StoreVersion: consts.Empty,
-		SourceRef:    consts.Empty,
-		SourceSHA:    consts.Empty,
-		TargetFolder: consts.Empty,
-		Plan:         nil,
-		Ref:          emptyRefInfo(),
+		ResolvedTasksJSON:    consts.Empty,
+		ResolvedDependencies: consts.Empty,
+		PullRequestNumber:    consts.Empty,
+		PullRequestURL:       consts.Empty,
+		Changed:              false,
+		StoreVersion:         consts.Empty,
+		SourceRef:            consts.Empty,
+		SourceSHA:            consts.Empty,
+		TargetFolder:         consts.Empty,
+		Plan:                 nil,
+		Ref:                  emptyRefInfo(),
 	}
 }
 
 func newResultWithOutputs() *rundomain.Result {
 	return &rundomain.Result{
-		ResolvedOutput: rundomain.ResolvedOutput{
-			ResolvedTasksJSON:    "{}",
-			ResolvedDependencies: emptyJSONArray,
-		},
-		PullRequestOutput: rundomain.PullRequestOutput{
-			PullRequestNumber: testPRNumber42,
-			PullRequestURL:    testPullRequestURL,
-		},
-		Changed:      true,
-		StoreVersion: "v1.2.3",
-		SourceRef:    "refs/tags/v1.2.3",
-		SourceSHA:    testSourceSHA,
-		TargetFolder: testTargetFolder,
-		Plan:         nil,
-		Ref:          emptyRefInfo(),
+		ResolvedTasksJSON:    "{}",
+		ResolvedDependencies: emptyJSONArray,
+		PullRequestNumber:    testPRNumber42,
+		PullRequestURL:       testPullRequestURL,
+		Changed:              true,
+		StoreVersion:         "v1.2.3",
+		SourceRef:            "refs/tags/v1.2.3",
+		SourceSHA:            testSourceSHA,
+		TargetFolder:         testTargetFolder,
+		Plan:                 nil,
+		Ref:                  emptyRefInfo(),
 	}
 }
 

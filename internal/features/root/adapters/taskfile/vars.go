@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	_ ports.RootTemplateProvider = Ops{}
-	_ ports.IncludeRewriter      = Ops{}
-	_ ports.RootTaskfileUpdater  = Ops{}
+	_ ports.RootTemplateProvider = (*Ops)(nil)
+	_ ports.IncludeRewriter      = (*Ops)(nil)
+	_ ports.RootTaskfileUpdater  = (*Ops)(nil)
 
 	errNoModuleVars = errors.New("module Taskfile has no vars")
 )

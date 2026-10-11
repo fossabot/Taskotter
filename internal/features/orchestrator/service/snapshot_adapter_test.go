@@ -29,9 +29,17 @@ func testSnapshot(t *testing.T) *storedomain.Snapshot {
 
 	root := t.TempDir()
 
-	return &storedomain.Snapshot{RootDir: root, Ref: storedomain.RefInfo{
-		DefaultBranch: "main", ResolvedCommit: "abc123", SourceRef: "refs/heads/main",
-	}}
+	return &storedomain.Snapshot{
+		Catalog: nil,
+		Deps:    nil,
+		Cleanup: nil,
+		RootDir: root, Ref: storedomain.RefInfo{
+			Repository:       "",
+			RequestedVersion: "",
+
+			DefaultBranch: "main", ResolvedCommit: "abc123", SourceRef: "refs/heads/main",
+		},
+	}
 }
 
 func assertSnapshotValues(

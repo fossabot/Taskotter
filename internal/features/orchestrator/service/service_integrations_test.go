@@ -299,7 +299,7 @@ func TestOrchestratorUpdatesExistingPR(t *testing.T) {
 func TestOrchestratorRunRequiresConfiguration(t *testing.T) {
 	t.Parallel()
 
-	result, err := new(service.Orchestrator).Run(t.Context(), &config.Config{})
+	result, err := new(service.Orchestrator).Run(t.Context(), new(config.Config))
 	iox.Discard(result)
 
 	if err == nil {
@@ -626,15 +626,13 @@ func newTestOrchestrator(
 func newTestOrchestratorParts(args *testOrchInput) (*service.Deps, *service.Orchestrator) {
 	args.t.Helper()
 
-	deps := &service.Deps{
-		Logger:       nil,
-		StoreClient:  args.store,
-		GitClient:    nil,
-		GitBrancher:  args.gitOps,
-		GitIndexer:   args.gitOps,
-		GitPublisher: args.gitOps,
-		PRClient:     args.pullReq,
-	}
+	deps := new(service.Deps)
+
+	deps.StoreClient = args.store
+	deps.GitBrancher = args.gitOps
+	deps.GitIndexer = args.gitOps
+	deps.GitPublisher = args.gitOps
+	deps.PRClient = args.pullReq
 
 	if args.gitWork != nil {
 		deps.GitClient = args.gitWork

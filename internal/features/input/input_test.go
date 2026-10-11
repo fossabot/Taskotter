@@ -41,14 +41,11 @@ func TestBuildMapsResolvedModules(t *testing.T) {
 func TestBuildReportsInputAssemblyFailure(t *testing.T) {
 	t.Parallel()
 
-	input, err := Build(&SyncInputArgs{
-		Cfg:      &config.Config{TargetFolder: config.DefaultTargetFolder},
-		Snapshot: testSnapshot{},
-		Resolutions: []resolvesvc.Resolution{
-			{LogicalTask: pathA, SourceModule: eslintNodePNPM},
-			{LogicalTask: pathB, SourceModule: eslintBun},
-		},
-	})
+	args := collisionInputArgs()
+
+	args.Snapshot = testSnapshot{}
+
+	input, err := Build(args)
 
 	if input.Config != nil {
 		t.Fatal("Build() returned input after destination collision")
@@ -61,7 +58,10 @@ func TestBuildReportsInputAssemblyFailure(t *testing.T) {
 
 func testBuildInput() *SyncInputArgs {
 	return &SyncInputArgs{
-		Cfg:         &config.Config{TargetFolder: "taskfiles", Tasks: []string{pathA}},
+		TaskfileOps: nil,
+		DepSources:  nil,
+
+		Cfg:         configForTest([]string{pathA}),
 		Snapshot:    testSnapshot{},
 		Resolutions: []resolvesvc.Resolution{{LogicalTask: pathA, SourceModule: eslintNodePNPM}},
 	}
@@ -95,4 +95,25 @@ func requireRequested(t *testing.T, input *Input, task string) lockmodel.ModuleR
 	}
 
 	return requested
+}
+
+func configForTest(tasks []string) *config.Config {
+	cfg := new(config.Config)
+
+	cfg.TargetFolder = config.DefaultTargetFolder
+	cfg.Tasks = tasks
+
+	return cfg
+}
+
+func collisionInputArgs() *SyncInputArgs {
+	args := new(SyncInputArgs)
+
+	args.Cfg = configForTest(nil)
+	args.Resolutions = []resolvesvc.Resolution{
+		{LogicalTask: pathA, SourceModule: eslintNodePNPM},
+		{LogicalTask: pathB, SourceModule: eslintBun},
+	}
+
+	return args
 }

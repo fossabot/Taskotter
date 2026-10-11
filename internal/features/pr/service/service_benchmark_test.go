@@ -104,7 +104,7 @@ func benchFilePaths(kind string) []string {
 }
 
 func benchBodyConfig() *config.Config {
-	cfg := &config.Config{}
+	cfg := new(config.Config)
 
 	cfg.Tasks = benchTaskNames()
 	cfg.JSRuntime = config.JSRuntimeNodeJS
@@ -118,7 +118,7 @@ func benchBodyConfig() *config.Config {
 }
 
 func benchBodyPlan() *plandomain.Plan {
-	plan := &plandomain.Plan{}
+	plan := new(plandomain.Plan)
 
 	plan.Requested = benchRequestedRecords()
 	plan.Dependencies = benchDependencyRecords()

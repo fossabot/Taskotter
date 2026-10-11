@@ -6,6 +6,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/task-otter/Taskotter/internal/shared/config"
@@ -298,7 +299,10 @@ func TestParseTasksMultilineAndDedupe(t *testing.T) {
 	dir := t.TempDir()
 	env := baseEnv(dir)
 
-	env[consts.InputTasks] = "eslint\nprettier,\ngo\ngo\n"
+	env[consts.InputTasks] = strings.Join(
+		[]string{testTaskEslint, "prettier,", consts.Go, consts.Go, consts.Empty},
+		consts.Newline,
+	)
 
 	cfg := loadEnvOK(t, env)
 

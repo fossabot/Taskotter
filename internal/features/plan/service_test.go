@@ -327,6 +327,10 @@ func TestRemoveStaleManagedFileReportsRemoveFailure(t *testing.T) {
 
 	err := removeStaleManagedFile(&removeStaleFileArgs{
 		old: &managedFile{
+			SourceModule: "",
+			SourcePath:   "",
+			SHA256:       "",
+
 			Path:              goOldTxtRel,
 			DestinationModule: consts.Go,
 		},
@@ -660,6 +664,9 @@ func TestRemoveStaleManagedFileReportsPruneFailure(t *testing.T) {
 
 	assertFails(t, removeStaleManagedFile(&removeStaleFileArgs{
 		old: &managedFile{
+			SourcePath: "",
+			SHA256:     "",
+
 			SourceModule:      consts.Empty,
 			Path:              goSubOldRel,
 			DestinationModule: consts.Go,
@@ -693,6 +700,9 @@ func TestScanLogicalRootDocsReportsWalkFailure(t *testing.T) {
 
 	args.destRoot = t.TempDir()
 	args.collect = &collectModuleArgs{
+		sourceDir:  "",
+		destDirRel: "",
+
 		syncInput: syncInputWithConfig(),
 		mod:       emptyModulePtr(consts.Empty, consts.Go),
 	}
@@ -769,19 +779,15 @@ func TestTryLegacyMetadataReportsCorrupt(t *testing.T) {
 func TestUpdateRootTaskfileReportsOpsFailure(t *testing.T) {
 	t.Parallel()
 
-	syncIn := emptySyncInput()
-	cfg := emptyConfig()
+	syncIn := syncInputWithConfig()
 
-	syncIn.Config = &cfg
 	syncIn.TaskfileOps = failingOps{}
 
-	root, tasks, err := updateRootTaskfile(&updateRootArgs{
-		args: buildRootArgs{
-			syncInput:      &syncIn,
-			moduleContents: nil,
-			oldLock:        nil,
-		},
-	})
+	args := new(updateRootArgs)
+
+	args.args.syncInput = syncIn
+
+	root, tasks, err := updateRootTaskfile(args)
 
 	iox.Discard(root)
 	iox.Discard(tasks)
@@ -1154,6 +1160,8 @@ func TestBuildRootPlanResultReportsReadFailure(t *testing.T) {
 	assertNoErr(t, mkdirAll(filepath.Join(workspace, rootTaskfileName), dirModePerm))
 
 	result, err := buildRootPlanResult(&buildRootPlanInput{
+		moduleContents: nil,
+
 		oldLock:   nil,
 		syncInput: minimalSyncInput(workspace),
 	})
@@ -1167,6 +1175,8 @@ func TestBuildRootTaskfileReportsUpdateFailure(t *testing.T) {
 	t.Parallel()
 
 	bytes, tasks, err := buildRootTaskfile(&buildRootArgs{
+		oldLock: nil,
+
 		syncInput:      failingRootSyncInput(t),
 		moduleContents: mcMap{},
 		rootBytes:      []byte(byteX),
@@ -1234,6 +1244,8 @@ func TestDiffFilesReportsLockMetadataFailure(t *testing.T) {
 	assertNoErr(t, mkdirAll(filepath.Join(workspace, filepath.FromSlash(lockRelPath)), dirModePerm))
 
 	lists, err := diffFiles(&diffInput{
+		oldRoot: nil,
+
 		plan:         planWithLockMeta(lockRelPath),
 		workspace:    workspace,
 		metadataPath: metaRelPath,
@@ -1256,6 +1268,8 @@ func TestDiffLockFileReportsContentFailure(t *testing.T) {
 	plan.Metadata = emptyMetadata(lockRelPath)
 
 	lists, err := diffLockFile(&diffLockArgs{
+		lists: diffLists{added: nil, updated: nil, removed: nil},
+
 		plan:      &plan,
 		workspace: t.TempDir(),
 		lockPath:  lockRelPath,
@@ -1355,6 +1369,8 @@ func TestPrepareModulePlanDirsReportsMissingSource(t *testing.T) {
 	t.Parallel()
 
 	rel, err := prepareModulePlanDirs(&modulePlanDirsInput{
+		oldLock: nil,
+
 		syncInput: minimalSyncInput(t.TempDir()),
 		mod:       emptyModulePtr(consts.Go, consts.Go),
 		sourceDir: filepath.Join(t.TempDir(), pathMissing),
@@ -1431,6 +1447,8 @@ func TestWalkCollectModuleFileReportsCollectFailure(t *testing.T) {
 	t.Parallel()
 
 	err := walkCollectModuleFile(&walkCollectArgs{
+		walkErr: nil,
+
 		opts: &collectOptions{
 			sourceDir:    srcDir,
 			ops:          nil,
@@ -1532,6 +1550,8 @@ func TestMetadataFileCandidateSkipsCurrentAndLegacy(t *testing.T) {
 		currentMetadataPath: metaRelPath,
 		abs:                 "/ws/" + metaRelPath,
 		entry: fakeDirEntry{
+			dir: false,
+
 			name: storeMetadataFileName,
 		},
 	})
@@ -1729,9 +1749,11 @@ func TestBuildReportsPreviousStateFailure(t *testing.T) {
 	workspace := filepath.Join(t.TempDir(), "workspace-file")
 	assertNoErr(t, os.WriteFile(workspace, []byte("not a directory"), testFileMode))
 
-	plan, err := Build(&domain.SyncInput{
-		Config: &config.Config{Workspace: workspace, TargetFolder: "taskfiles"},
-	})
+	input := new(domain.SyncInput)
+
+	input.Config = configForTest(workspace, "taskfiles", nil)
+
+	plan, err := Build(input)
 	if err == nil {
 		t.Fatal("Build() error = nil, want previous-state failure")
 	}
@@ -1801,9 +1823,11 @@ func TestSortManagedFilesOrdersByPath(t *testing.T) {
 func TestUpdateRootTaskfileRequiresOps(t *testing.T) {
 	t.Parallel()
 
-	root, tasks, err := updateRootTaskfile(&updateRootArgs{
-		args: buildRootArgs{syncInput: emptySyncInputPtr()},
-	})
+	args := new(updateRootArgs)
+
+	args.args.syncInput = emptySyncInputPtr()
+
+	root, tasks, err := updateRootTaskfile(args)
 
 	iox.Discard(root)
 	iox.Discard(tasks)
@@ -1855,6 +1879,8 @@ func TestWalkCollectModuleFileReportsWalkError(t *testing.T) {
 	t.Parallel()
 
 	err := walkCollectModuleFile(&walkCollectArgs{
+		contents: nil,
+
 		absPath: stagingName,
 		walkErr: errStub,
 		opts: &collectOptions{
@@ -1901,17 +1927,15 @@ func TestDiffLockAndMetadataReportsMetadataFailure(t *testing.T) {
 	workspace := t.TempDir()
 	assertNoErr(t, mkdirAll(filepath.Join(workspace, filepath.FromSlash(metaRelPath)), dirModePerm))
 
-	plan := emptyPlan()
-
-	plan.Metadata = emptyMetadata(lockRelPath)
-	plan.Lock = emptyLock()
+	plan := planWithLockMeta(lockRelPath)
 
 	lists, err := diffLockAndMetadata(&diffInput{
-		plan:         &plan,
+		plan:         plan,
 		workspace:    workspace,
 		metadataPath: metaRelPath,
 		plannedMeta:  []byte(byteX),
 		syncRoot:     syncRootDisabled,
+		oldRoot:      nil,
 	}, zeroDiffLists())
 	iox.Discard(lists)
 	assertFails(t, err)
@@ -1925,6 +1949,10 @@ func TestDiffMetadataFileSectionReportsFailure(t *testing.T) {
 	assertNoErr(t, mkdirAll(filepath.Join(workspace, filepath.FromSlash(metaRelPath)), dirModePerm))
 
 	lists, err := diffMetadataFileSection(&diffInput{
+		plan:     nil,
+		oldRoot:  nil,
+		syncRoot: 0,
+
 		workspace:    workspace,
 		metadataPath: metaRelPath,
 		plannedMeta:  []byte(byteX),
@@ -2005,6 +2033,11 @@ func TestCollectModuleFileReportsRelFailure(t *testing.T) {
 	swapRelPath(t, failingRelPath)
 
 	err := collectModuleFile(&moduleCollectArgs{
+		ops:          nil,
+		sourceToDest: nil,
+		fromDest:     "",
+		docPolicy:    0,
+
 		sourceDir: srcDir,
 		absPath:   srcFileA,
 		entry:     fakeDirEntry{name: pathA, dir: false},
@@ -2025,7 +2058,10 @@ func TestMergeParentDocFilesReportsReadyFailure(t *testing.T) {
 		contents:   fMap{},
 		parentDocs: map[string]struct{}{},
 		collect: &collectModuleArgs{
-			syncInput: &domain.SyncInput{Config: &config.Config{}},
+			sourceDir:  "",
+			destDirRel: "",
+
+			syncInput: syncInputWithConfig(),
 			mod:       emptyModulePtr(consts.Empty, consts.Go),
 		},
 	})
@@ -2103,6 +2139,9 @@ func TestGeneratedTaskMetadataMissingRecord(t *testing.T) {
 	t.Parallel()
 
 	meta, ok := generatedTaskMetadata(&groupModulesInput{
+		common:    nil,
+		requested: nil,
+
 		requestedRecords: map[string]moduleRecord{},
 		metadata:         storeTaskMetaMap{},
 	}, consts.Go)
@@ -2277,15 +2316,13 @@ func failingRootSyncInput(t *testing.T) *domain.SyncInput {
 	assertNoErr(t, mkdirAll(filepath.Join(root, taskfilesDirName), dirModePerm))
 
 	return &domain.SyncInput{
+		Dependencies: nil,
+
 		Config:      emptyConfigPtr(),
 		Snapshot:    stubSnapshot{root: root},
 		TaskfileOps: failingOps{},
 		Requested: map[string]moduleRecord{
-			consts.Go: {
-				SourceModule:      consts.Go,
-				DestinationModule: consts.Empty,
-				Path:              consts.Empty,
-			},
+			consts.Go: emptyModule(consts.Go, consts.Empty),
 		},
 		DestByTask:   map[string]string{consts.Go: consts.Go},
 		SourceToDest: map[string]string{consts.Go: consts.Go},
@@ -2831,3 +2868,13 @@ func (stubSnapshot) ResolvedCommit() string { return consts.Empty }
 func (stubSnapshot) SourceRef() string { return consts.Empty }
 
 func (snap stubSnapshot) WorkspaceRoot() string { return snap.root }
+
+func configForTest(workspace, targetFolder string, tasks []string) *config.Config {
+	cfg := new(config.Config)
+
+	cfg.Workspace = workspace
+	cfg.TargetFolder = targetFolder
+	cfg.Tasks = tasks
+
+	return cfg
+}

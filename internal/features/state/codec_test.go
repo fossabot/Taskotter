@@ -45,12 +45,12 @@ func TestSyncErrorReturnsMessage(t *testing.T) {
 func assertInvalidDocumentErrors(t *testing.T) {
 	t.Helper()
 
-	assertCodecError(t, DecodeMetadataYAML([]byte(testBadYAML), &Metadata{}))
-	assertCodecError(t, DecodeMetadataYAML(nil, &Metadata{}))
+	assertCodecError(t, DecodeMetadataYAML([]byte(testBadYAML), new(Metadata)))
+	assertCodecError(t, DecodeMetadataYAML(nil, new(Metadata)))
 	assertDecodeMetadataFailure(t)
 	assertDecodeLockFailure(t)
-	assertCodecError(t, UnmarshalYAMLMapping(&yaml.Node{Kind: yaml.ScalarNode}, testLabel, nil))
-	assertCodecError(t, UnmarshalMetadata(&yaml.Node{Kind: yaml.ScalarNode}, &Metadata{}))
+	assertCodecError(t, UnmarshalYAMLMapping(newTestYAMLNode(yaml.ScalarNode, ""), testLabel, nil))
+	assertCodecError(t, UnmarshalMetadata(newTestYAMLNode(yaml.ScalarNode, ""), new(Metadata)))
 }
 
 func assertDecodeMetadataFailure(t *testing.T) {
@@ -79,10 +79,10 @@ func assertInvalidMappingErrors(t *testing.T) {
 	t.Helper()
 
 	assertCodecError(t, decodeYAMLField(map[string]*yaml.Node{
-		testNumber: {Kind: yaml.ScalarNode, Value: testNotANumber},
+		testNumber: newTestYAMLNode(yaml.ScalarNode, testNotANumber),
 	}, testNumber, new(int)))
 	assertCodecError(t, decodeYAMLFields(map[string]*yaml.Node{
-		testNumber: {Kind: yaml.ScalarNode, Value: testNotANumber},
+		testNumber: newTestYAMLNode(yaml.ScalarNode, testNotANumber),
 	}, struct {
 		Out any
 		Key string
@@ -104,7 +104,7 @@ func assertDocumentContent(t *testing.T) {
 		t.Fatal("yamlDocumentContent(nil) did not return nil")
 	}
 
-	emptyDocument := &yaml.Node{Kind: yaml.DocumentNode}
+	emptyDocument := newTestYAMLNode(yaml.DocumentNode, "")
 
 	if yamlDocumentContent(emptyDocument) != emptyDocument {
 		t.Fatal("empty document was not preserved")
@@ -158,4 +158,13 @@ func mappingNode(t *testing.T, source string) *yaml.Node {
 	}
 
 	return yamlDocumentContent(&document)
+}
+
+func newTestYAMLNode(kind yaml.Kind, value string) *yaml.Node {
+	node := new(yaml.Node)
+
+	node.Kind = kind
+	node.Value = value
+
+	return node
 }

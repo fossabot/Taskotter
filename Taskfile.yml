@@ -1,6 +1,9 @@
 ---
 version: "3.5"
 
+env:
+ GOTOOLCHAIN: go1.27.2
+
 includes:
   taskotter:
     taskfile: taskotter/Taskfile.yml

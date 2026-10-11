@@ -89,7 +89,10 @@ func TestLoggerRecordsFirstWriteError(t *testing.T) {
 func TestLoggerRecordsShortWrite(t *testing.T) {
 	t.Parallel()
 
-	writer := &faults.StubWriter{Count: consts.IndexZero}
+	writer := &faults.StubWriter{
+		Err:   nil,
+		Count: consts.IndexZero,
+	}
 	log := logging.NewWithWriter(writer)
 
 	log.Print("incomplete")

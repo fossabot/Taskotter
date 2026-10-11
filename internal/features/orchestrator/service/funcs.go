@@ -180,6 +180,8 @@ func buildPlanResult(deps *Deps, inp *buildPlanInput, ref *refInfo) (planResult,
 
 func buildSyncPlan(deps *Deps, inp *buildPlanInput) (syncPlanBuild, error) {
 	syncInput, err := deps.PrepareSyncInput(&inputpkg.SyncInputArgs{
+		TaskfileOps: nil,
+
 		Cfg:         inp.cfg,
 		Snapshot:    NewSnapshotAdapter(inp.snapshot),
 		Resolutions: inp.resolutions,
@@ -999,28 +1001,23 @@ func logResultMetadata(log *logging.Logger, result *rundomain.Result) {
 	log.Printf(fmtTargetFolder, result.TargetFolder)
 }
 
-//nolint:funlen // The complete result schema is easiest to audit in one literal.
 func newResultShell(
 	cfg *config.Config,
 	resultPlan *planpkg.Plan,
 	ref *storedomain.RefInfo,
 ) *rundomain.Result {
 	return &rundomain.Result{
-		ResolvedOutput: rundomain.ResolvedOutput{
-			ResolvedTasksJSON:    consts.Empty,
-			ResolvedDependencies: consts.Empty,
-		},
-		PullRequestOutput: rundomain.PullRequestOutput{
-			PullRequestNumber: consts.Empty,
-			PullRequestURL:    consts.Empty,
-		},
-		Changed:      resultPlan.Changed,
-		StoreVersion: cfg.StoreVersion,
-		SourceRef:    ref.SourceRef,
-		SourceSHA:    ref.ResolvedCommit,
-		TargetFolder: cfg.TargetFolder,
-		Plan:         resultPlan,
-		Ref:          *ref,
+		ResolvedTasksJSON:    consts.Empty,
+		ResolvedDependencies: consts.Empty,
+		PullRequestNumber:    consts.Empty,
+		PullRequestURL:       consts.Empty,
+		Changed:              resultPlan.Changed,
+		StoreVersion:         cfg.StoreVersion,
+		SourceRef:            ref.SourceRef,
+		SourceSHA:            ref.ResolvedCommit,
+		TargetFolder:         cfg.TargetFolder,
+		Plan:                 resultPlan,
+		Ref:                  *ref,
 	}
 }
 

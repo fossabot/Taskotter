@@ -5,6 +5,7 @@ package input
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/task-otter/Taskotter/internal/features/plan/domain"
 	resolvesvc "github.com/task-otter/Taskotter/internal/features/resolve/service"
@@ -17,7 +18,7 @@ import (
 // SyncInput maps resolved modules and dependencies into syncer input records.
 func SyncInput(args *SyncInputArgs) (domain.SyncInput, error) {
 	requestedSources := collectRequestedSources(args.Resolutions)
-	allSources := append(append([]string{}, requestedSources...), args.DepSources...)
+	allSources := slices.Concat(requestedSources, args.DepSources)
 
 	input, err := assembleSyncInput(args, allSources)
 	if err != nil {

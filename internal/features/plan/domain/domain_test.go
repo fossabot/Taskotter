@@ -219,5 +219,14 @@ func unmarshalMetaOK(t *testing.T, payload string, meta *state.Metadata) {
 }
 
 func yamlScalarNode(value string) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Value: value}
+	return newTestYAMLNode(yaml.ScalarNode, value)
+}
+
+func newTestYAMLNode(kind yaml.Kind, value string) *yaml.Node {
+	node := new(yaml.Node)
+
+	node.Kind = kind
+	node.Value = value
+
+	return node
 }

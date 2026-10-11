@@ -104,6 +104,8 @@ func TestWriteOutputsMultilineJSON(t *testing.T) {
 
 func buildPRBodyPlan() *plandomain.Plan {
 	return &plandomain.Plan{
+		Input: nil,
+
 		OldLock:          nil,
 		CopyFileTo:       nil,
 		ModuleContents:   nil,

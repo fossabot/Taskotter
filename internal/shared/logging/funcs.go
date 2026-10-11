@@ -21,7 +21,10 @@ func New() *Logger {
 
 // NewWithWriter creates a logger that writes to the supplied writer.
 func NewWithWriter(writer io.Writer) *Logger {
-	sink := &failureSink{destination: writer}
+	sink := &failureSink{
+		firstError:  nil,
+		destination: writer,
+	}
 
 	return &Logger{
 		output: zerolog.New(sink),

@@ -41,11 +41,7 @@ func BenchmarkExtractTarGz(b *testing.B) {
 }
 
 func benchTarEntry(writer *tar.Writer, name, body string) error {
-	header := &tar.Header{
-		Name: name,
-		Mode: consts.FilePerm644,
-		Size: int64(len(body)),
-	}
+	header := regularTarHeader(name, int64(len(body)))
 
 	err := writer.WriteHeader(header)
 	if err != nil {

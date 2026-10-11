@@ -229,6 +229,8 @@ func TestAddMissingPromotedVarSkipsUnknownKey(t *testing.T) {
 	rootVars := newYAMLMappingNode()
 
 	addMissingPromotedVar(&addPromotedVarParams{
+		rawVars: nil,
+
 		rootVars:   rootVars,
 		moduleVars: map[string]*yaml.Node{},
 		existing:   map[string]struct{}{},
@@ -603,6 +605,8 @@ func TestMarshalNodeReportsEncoderFailure(t *testing.T) {
 	assertFails(t, err)
 
 	out, err = marshalUpdatedRootTaskfile(&marshalRootParams{
+		content: nil,
+
 		node: emptyDocumentNode(), root: newYAMLMappingNode(), input: goRootInput(),
 	})
 	iox.Discard(out)
@@ -832,7 +836,11 @@ func TestStoreExtractedVarsSkipsNilAndNotOK(t *testing.T) {
 	result := &rootVarsResult{byTask: map[string]*yaml.Node{}, raw: map[string]string{}}
 
 	storeExtractedVars(result, "nil", nil)
-	storeExtractedVars(result, "not-ok", &extractedVars{})
+	storeExtractedVars(result, "not-ok", &extractedVars{
+		node: nil,
+		raw:  nil,
+		ok:   false,
+	})
 
 	if len(result.byTask) != consts.IndexZero {
 		t.Fatalf("byTask = %#v", result.byTask)
@@ -920,11 +928,11 @@ func failIfErr(t *testing.T, err error) {
 }
 
 func emptyDocumentNode() *yaml.Node {
-	return &yaml.Node{Kind: yaml.DocumentNode}
+	return newTestYAMLNode(yaml.DocumentNode, "")
 }
 
 func newYAMLSequenceNodeForTest() *yaml.Node {
-	return &yaml.Node{Kind: yaml.SequenceNode}
+	return newTestYAMLNode(yaml.SequenceNode, "")
 }
 
 func assertClosingQuote(t *testing.T, testCase *closingQuoteCase) {
@@ -1041,7 +1049,7 @@ func assertRawVarKeys(t *testing.T, raw map[string]string) {
 func assertRawVarSplice(t *testing.T, raw map[string]string) {
 	t.Helper()
 
-	mapNode := &yaml.Node{Kind: yaml.MappingNode}
+	mapNode := newTestYAMLNode(yaml.MappingNode, "")
 	replaceOrAppendScalar(mapNode, rawVarA, oldTask)
 	replaceOrAppendScalar(mapNode, rawVarA, "new")
 	placeholderOneRootVar(mapNode, rawVarB, consts.Empty)
@@ -1120,4 +1128,13 @@ func assertInt(t *testing.T, assertion *intAssertion) {
 	if assertion.got != assertion.want {
 		t.Fatalf("%s = %d, want %d", assertion.label, assertion.got, assertion.want)
 	}
+}
+
+func newTestYAMLNode(kind yaml.Kind, value string) *yaml.Node {
+	node := new(yaml.Node)
+
+	node.Kind = kind
+	node.Value = value
+
+	return node
 }

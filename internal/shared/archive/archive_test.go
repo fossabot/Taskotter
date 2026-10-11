@@ -539,14 +539,15 @@ func singleEntryArchive(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-//nolint:exhaustruct // the extractor only reads the type, name, size, and mode
 func testHeader(typeflag byte, name string, size int64) *tar.Header {
-	return &tar.Header{
-		Typeflag: typeflag,
-		Name:     name,
-		Size:     size,
-		Mode:     consts.FilePerm644,
-	}
+	header := new(tar.Header)
+
+	header.Typeflag = typeflag
+	header.Name = name
+	header.Size = size
+	header.Mode = consts.FilePerm644
+
+	return header
 }
 
 func failOnErr(t *testing.T, err error) {

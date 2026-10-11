@@ -38,8 +38,11 @@ type (
 
 	// ResolvedTask describes the resolved \1ask.
 	ResolvedTask struct {
-		SourceModule      string
-		DestinationModule string
-		Path              string
+		// DestinationModule names the module in the consumer repository.
+		DestinationModule string `json:"destination_module"`
+		// Path is the module directory relative to the consumer repository.
+		Path string `json:"path"`
+		// SourceModule names the selected module in the store.
+		SourceModule string `json:"source_module"`
 	}
 )

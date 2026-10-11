@@ -361,5 +361,20 @@ func newStubClient(t *testing.T, status int, body string) *Client {
 }
 
 func newStubResponse(body io.ReadCloser) *http.Response {
-	return &http.Response{Body: body}
+	return &http.Response{
+		Status:           "",
+		StatusCode:       consts.IndexZero,
+		Proto:            "",
+		ProtoMajor:       consts.IndexZero,
+		ProtoMinor:       consts.IndexZero,
+		Header:           nil,
+		ContentLength:    consts.IndexZero,
+		TransferEncoding: nil,
+		Close:            false,
+		Uncompressed:     false,
+		Trailer:          nil,
+		Request:          nil,
+		TLS:              nil,
+		Body:             body,
+	}
 }

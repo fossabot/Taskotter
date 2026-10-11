@@ -382,7 +382,21 @@ func newRefInfoForTest() *RefInfo {
 }
 
 func newResponse(status int, body io.ReadCloser) *http.Response {
-	return &http.Response{StatusCode: status, Body: body}
+	return &http.Response{
+		Status:           "",
+		Proto:            "",
+		ProtoMajor:       consts.IndexZero,
+		ProtoMinor:       consts.IndexZero,
+		Header:           nil,
+		ContentLength:    consts.IndexZero,
+		TransferEncoding: nil,
+		Close:            false,
+		Uncompressed:     false,
+		Trailer:          nil,
+		Request:          nil,
+		TLS:              nil,
+		StatusCode:       status, Body: body,
+	}
 }
 
 func okBody() *stubBody {

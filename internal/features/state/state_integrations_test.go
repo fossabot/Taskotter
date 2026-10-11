@@ -134,13 +134,11 @@ func assertMetadataFixture(t *testing.T, meta *Metadata) {
 func writeLockFixture(t *testing.T, root, rel string) lockmodel.LockFile {
 	t.Helper()
 
-	want := lockmodel.LockFile{
-		Source: lockmodel.LockSource{
-			Repository: "task-otter/Taskotter-store",
-			SourceRef:  "refs/heads/main",
-		},
-		Configuration: lockmodel.LockConfiguration{TargetFolder: testTargetFolder},
-	}
+	var want lockmodel.LockFile
+
+	want.Source.Repository = "task-otter/Taskotter-store"
+	want.Source.SourceRef = "refs/heads/main"
+	want.Configuration.TargetFolder = testTargetFolder
 
 	err := os.WriteFile(
 		filepath.Join(root, rel),

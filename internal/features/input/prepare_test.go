@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	resolvesvc "github.com/task-otter/Taskotter/internal/features/resolve/service"
-	"github.com/task-otter/Taskotter/internal/shared/config"
 	"github.com/task-otter/Taskotter/internal/shared/consts"
 )
 
@@ -37,8 +36,14 @@ func TestCollectRequestedSourcesPreservesOrder(t *testing.T) {
 	t.Parallel()
 
 	got := collectRequestedSources([]resolvesvc.Resolution{
-		{SourceModule: consts.Go},
-		{SourceModule: eslint},
+		{
+			LogicalTask:  "",
+			SourceModule: consts.Go,
+		},
+		{
+			LogicalTask:  "",
+			SourceModule: eslint,
+		},
 	})
 
 	if len(got) != consts.IndexTwo || got[consts.IndexZero] != consts.Go {
@@ -50,13 +55,14 @@ func TestCollectRequestedSourcesPreservesOrder(t *testing.T) {
 func TestPrepareSyncInputBuildsRecords(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config.Config{TargetFolder: config.DefaultTargetFolder}
+	cfg := configForTest(nil)
 	resolutions := []resolvesvc.Resolution{
 		{LogicalTask: pathA, SourceModule: consts.Go},
 	}
 
 	input, err := SyncInput(&SyncInputArgs{
 		Cfg: cfg, Resolutions: resolutions, DepSources: []string{"shellcheck"},
+		Snapshot: nil, TaskfileOps: nil,
 	})
 	if err != nil {
 		t.Fatalf("SyncInput() error = %v", err)
@@ -68,13 +74,7 @@ func TestPrepareSyncInputBuildsRecords(t *testing.T) {
 func assertDestinationCollision(t *testing.T) {
 	t.Helper()
 
-	input, err := SyncInput(&SyncInputArgs{
-		Cfg: &config.Config{TargetFolder: config.DefaultTargetFolder},
-		Resolutions: []resolvesvc.Resolution{
-			{LogicalTask: pathA, SourceModule: eslintNodePNPM},
-			{LogicalTask: pathB, SourceModule: eslintBun},
-		},
-	})
+	input, err := SyncInput(collisionInputArgs())
 
 	if input.Config != nil {
 		t.Fatal("collision unexpectedly produced input")

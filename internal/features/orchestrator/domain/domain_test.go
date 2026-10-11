@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 )
@@ -33,14 +34,16 @@ func TestResolvedTaskMarshalJSONUsesOutputKeys(t *testing.T) {
 func marshalTask(t *testing.T, task *ResolvedTask) map[string]string {
 	t.Helper()
 
-	data, err := task.MarshalJSON()
+	var buffer bytes.Buffer
+
+	err := json.NewEncoder(&buffer).Encode(task)
 	if err != nil {
-		t.Fatalf("MarshalJSON() error = %v", err)
+		t.Fatal(err)
 	}
 
 	var got map[string]string
 
-	err = json.Unmarshal(data, &got)
+	err = json.Unmarshal(buffer.Bytes(), &got)
 	if err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}

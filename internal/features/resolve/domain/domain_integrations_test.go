@@ -43,6 +43,9 @@ func TestResolveErrorMessageOmitsOptionalDetails(t *testing.T) {
 	t.Parallel()
 
 	resolveErr := &domain.ResolveError{
+		Attempted:    "",
+		CloseMatches: nil,
+
 		LogicalTask: consts.Go,
 		Message:     notFoundMsg,
 	}
@@ -56,25 +59,29 @@ func TestResolveErrorMessageOmitsOptionalDetails(t *testing.T) {
 func TestResolveErrorEmptyMessageBranches(t *testing.T) {
 	t.Parallel()
 
-	assertContains(
-		t,
-		(&domain.ResolveError{LogicalTask: consts.Go, Attempted: attemptedModule}).Error(),
-		attemptedModule,
-	)
-	assertContains(
-		t,
-		(&domain.ResolveError{LogicalTask: consts.Go, CloseMatches: []string{consts.Go}}).Error(),
-		closeMatches,
-	)
-	assertContains(t, (&domain.ResolveError{LogicalTask: consts.Go}).Error(), `task "go"`)
-	assertContains(t, (&domain.ResolveError{}).Error(), `task ""`)
+	attempted := resolveErrorForTask(consts.Go)
+
+	attempted.Attempted = attemptedModule
+	assertContains(t, attempted.Error(), attemptedModule)
+
+	matches := resolveErrorForTask(consts.Go)
+
+	matches.CloseMatches = []string{consts.Go}
+	assertContains(t, matches.Error(), closeMatches)
+	assertContains(t, resolveErrorForTask(consts.Go).Error(), `task "go"`)
+	assertContains(t, resolveErrorForTask(consts.Empty).Error(), `task ""`)
 }
 
 // TestResolveErrorTask covers Task().
 func TestResolveErrorTask(t *testing.T) {
 	t.Parallel()
 
-	resolveErr := &domain.ResolveError{LogicalTask: consts.Go}
+	resolveErr := &domain.ResolveError{
+		Attempted:    "",
+		Message:      "",
+		CloseMatches: nil,
+		LogicalTask:  consts.Go,
+	}
 
 	if resolveErr.Task() != consts.Go {
 		t.Fatalf("Task() = %q", resolveErr.Task())
@@ -95,4 +102,12 @@ func assertOmits(t *testing.T, msg, needle string) {
 	if strings.Contains(msg, needle) {
 		t.Fatalf(errorFmt, msg)
 	}
+}
+
+func resolveErrorForTask(task string) *domain.ResolveError {
+	resolveErr := new(domain.ResolveError)
+
+	resolveErr.LogicalTask = task
+
+	return resolveErr
 }

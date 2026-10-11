@@ -58,15 +58,19 @@ func testLockRoundTrip(t *testing.T) {
 }
 
 func testLock() *lockmodel.LockFile {
-	return &lockmodel.LockFile{
-		Source: lockmodel.LockSource{Repository: "owner/store", ResolvedCommit: "deadbeef"},
-		Requested: lockmodel.OrderedRequested{
-			testRequestedLint: lockmodel.ModuleRecord{
-				SourceModule: "eslint/node/pnpm",
-				Path:         "taskfiles/eslint",
-			},
+	lock := new(lockmodel.LockFile)
+
+	lock.Source.Repository = "owner/store"
+	lock.Source.ResolvedCommit = "deadbeef"
+	lock.Requested = lockmodel.OrderedRequested{
+		testRequestedLint: lockmodel.ModuleRecord{
+			DestinationModule: "",
+			SourceModule:      "eslint/node/pnpm",
+			Path:              "taskfiles/eslint",
 		},
 	}
+
+	return lock
 }
 
 func assertLockRoundTrip(t *testing.T, got, want *lockmodel.LockFile) {

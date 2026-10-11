@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/task-otter/Taskotter/internal/shared/archive"
 	"github.com/task-otter/Taskotter/internal/shared/consts"
@@ -50,8 +49,8 @@ func TestExtractDirectoryEntry(t *testing.T) {
 	t.Parallel()
 
 	data := buildTarGzWithHeaders(t, []*tar.Header{
-		{Name: "repo-main/", Mode: consts.FilePerm755, Typeflag: tar.TypeDir},
-		{Name: "repo-main/taskfiles", Mode: consts.FilePerm755, Typeflag: tar.TypeDir},
+		typedTarHeader("repo-main/", consts.FilePerm755, tar.TypeDir),
+		typedTarHeader("repo-main/taskfiles", consts.FilePerm755, tar.TypeDir),
 		regularTarHeader(testRepoTaskfileGo, int64(len(testContentTaskfileV3))),
 	})
 	dest := extractToTemp(t, data)
@@ -201,7 +200,7 @@ func TestRejectUnsupportedEntryType(t *testing.T) {
 	t.Parallel()
 
 	data := buildTarGzWithHeaders(t, []*tar.Header{
-		{Name: "repo-main/device", Mode: consts.FilePerm644, Typeflag: tar.TypeChar},
+		typedTarHeader("repo-main/device", consts.FilePerm644, tar.TypeChar),
 	})
 
 	result, err := archive.ExtractTarGz(bytes.NewReader(data), t.TempDir())
@@ -296,25 +295,14 @@ func newTarGzBuilder(t *testing.T) *tarGzBuilder {
 }
 
 func regularTarHeader(name string, size int64) *tar.Header {
-	return &tar.Header{
-		Name:       name,
-		Mode:       consts.FilePerm644,
-		Size:       size,
-		Typeflag:   tar.TypeReg,
-		Linkname:   consts.Empty,
-		Uid:        consts.IndexZero,
-		Gid:        consts.IndexZero,
-		Uname:      consts.Empty,
-		Gname:      consts.Empty,
-		ModTime:    time.Time{},
-		AccessTime: time.Time{},
-		ChangeTime: time.Time{},
-		Devmajor:   consts.IndexZero,
-		Devminor:   consts.IndexZero,
-		Xattrs:     nil,
-		PAXRecords: nil,
-		Format:     tar.FormatUnknown,
-	}
+	header := new(tar.Header)
+
+	header.Name = name
+	header.Mode = consts.FilePerm644
+	header.Size = size
+	header.Typeflag = tar.TypeReg
+
+	return header
 }
 
 func extractedFilePerm(t *testing.T, dest, rel string) os.FileMode {
@@ -340,25 +328,13 @@ func extractedIsDir(t *testing.T, dest, rel string) bool {
 }
 
 func symlinkTarHeader(name, linkname string) *tar.Header {
-	return &tar.Header{
-		Name:       name,
-		Mode:       consts.IndexZero,
-		Size:       consts.IndexZero,
-		Typeflag:   tar.TypeSymlink,
-		Linkname:   linkname,
-		Uid:        consts.IndexZero,
-		Gid:        consts.IndexZero,
-		Uname:      consts.Empty,
-		Gname:      consts.Empty,
-		ModTime:    time.Time{},
-		AccessTime: time.Time{},
-		ChangeTime: time.Time{},
-		Devmajor:   consts.IndexZero,
-		Devminor:   consts.IndexZero,
-		Xattrs:     nil,
-		PAXRecords: nil,
-		Format:     tar.FormatUnknown,
-	}
+	header := new(tar.Header)
+
+	header.Name = name
+	header.Typeflag = tar.TypeSymlink
+	header.Linkname = linkname
+
+	return header
 }
 
 func (builder *tarGzBuilder) finish() []byte {
@@ -430,4 +406,14 @@ func (builder *tarGzBuilder) writeRegularPayload(size int64) {
 
 		remaining -= writeSize
 	}
+}
+
+func typedTarHeader(name string, mode int64, typeflag byte) *tar.Header {
+	header := new(tar.Header)
+
+	header.Name = name
+	header.Mode = mode
+	header.Typeflag = typeflag
+
+	return header
 }

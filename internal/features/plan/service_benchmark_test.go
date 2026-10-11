@@ -92,15 +92,7 @@ func BenchmarkDiff(b *testing.B) {
 // BenchmarkUpdateRootTaskfile measures performance.
 func BenchmarkUpdateRootTaskfile(b *testing.B) {
 	template := taskfile.NewRootTemplate()
-	input := &rootupd.RootUpdateInput{
-		TargetFolder: testTargetFolderTaskfiles,
-		Tasks:        []string{consts.Go},
-		ManagedTasks: []string{consts.Go},
-		DestByTask:   map[string]string{consts.Go: consts.Go},
-		ModuleTaskfiles: map[string][]byte{
-			consts.Go: []byte("version: \"3\"\nvars:\n  GO_VER: 1.26.5\n"),
-		},
-	}
+	input := benchmarkRootUpdateInput()
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -244,6 +236,8 @@ func benchSyncInput(b *testing.B) plandomain.SyncInput {
 	cfg := benchPlanConfig(b)
 
 	input, err := inputpkg.SyncInput(&inputpkg.SyncInputArgs{
+		DepSources: nil,
+
 		Cfg:         cfg,
 		Snapshot:    newTestSnapshotAdapter(snap),
 		Resolutions: benchResolutions(b, cfg, snap),
@@ -308,4 +302,18 @@ func runBuildPlanBenchmark(b *testing.B, input *plandomain.SyncInput) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func benchmarkRootUpdateInput() *rootupd.RootUpdateInput {
+	input := new(rootupd.RootUpdateInput)
+
+	input.TargetFolder = testTargetFolderTaskfiles
+	input.Tasks = []string{consts.Go}
+	input.ManagedTasks = []string{consts.Go}
+	input.DestByTask = map[string]string{consts.Go: consts.Go}
+	input.ModuleTaskfiles = map[string][]byte{
+		consts.Go: []byte("version: \"3\"\nvars:\n  GO_VER: 1.26.5\n"),
+	}
+
+	return input
 }

@@ -372,10 +372,12 @@ func swapStdout(t *testing.T, writer io.Writer) {
 }
 
 func unchangedResult() *rundomain.Result {
-	return &rundomain.Result{
-		Changed:   false,
-		SourceSHA: sourceSHAHex,
-	}
+	result := new(rundomain.Result)
+
+	result.Changed = false
+	result.SourceSHA = sourceSHAHex
+
+	return result
 }
 
 func invalidRepoOrchestratorConfig() *config.Config {

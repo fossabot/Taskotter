@@ -1710,6 +1710,8 @@ func applyDiffResults(plan *domain.Plan, lists *diffLists, input *stagePathsInpu
 
 func assemblePlan(input *assemblePlanInput) *domain.Plan {
 	return &domain.Plan{
+		Input: nil,
+
 		Requested:        input.syncInput.Requested,
 		Dependencies:     input.syncInput.Dependencies,
 		ManagedFiles:     input.artifacts.plannedFiles,
