@@ -32,6 +32,7 @@ const (
 	wantVersion35            = `version: "3.5"`
 	fmtWantVersion35         = "expected root Taskfile version 3.5: %s"
 	pathTaskfilesGoYML       = "taskfiles/go/Taskfile.yml"
+	pathTaskfilesESLintYML   = "taskfiles/eslint/Taskfile.yml"
 	destPnpm                 = "pnpm"
 	wantPnpmRewrite          = "../pnpm/Taskfile.yml"
 	moduleESLintNodeVariant  = "eslint/node"
@@ -53,6 +54,8 @@ const (
 	wantIncludeDirDot     = "dir: ."
 	wantIncludeDirParent  = "dir: .."
 	foldedGoLoadCollapsed = `GetEnvironmentVariable('Path', 'User'); if (\$u)`
+	scannersVarKey        = "  Z_SCANNERS:"
+	argsVarKey            = "  A_ARGS:"
 )
 
 // TestRewriteIncludes verifies include taskfile paths are rewritten to destination paths.
@@ -257,34 +260,15 @@ func TestUpdateRootTaskfileGeneratedTasksAndPromotedVars(t *testing.T) {
 func TestUpdateRootTaskfilePreservesModuleVarOrder(t *testing.T) {
 	t.Parallel()
 
-	input := goOnlyRootInput()
-	input.ModuleTaskfiles = map[string][]byte{consts.Go: []byte(`version: '3'
-vars:
-  Z_SCANNERS: '{{.Z_SCANNERS | default "vuln,secret"}}'
-  A_ARGS: >-
-    {{.A_ARGS | default (printf "--scanners %s" .Z_SCANNERS)}}
-`)}
+	input := orderedModuleVarsInput()
 
 	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	text := string(out)
-	scanners := strings.Index(text, "  Z_SCANNERS:")
-	args := strings.Index(text, "  A_ARGS:")
-	if scanners < 0 || args < 0 || scanners >= args {
-		t.Fatalf("dependent args must follow scanners in root vars:\n%s", out)
-	}
-
-	resynced, err := taskfile.UpdateRootTaskfile(out, input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !bytes.Equal(out, resynced) {
-		t.Fatalf("variable order changed on resync:\n%s", resynced)
-	}
+	assertVarOrder(t, string(out), []string{scannersVarKey, argsVarKey})
+	assertVarOrderResync(t, out, input)
 }
 
 // TestUpdateRootTaskfileRepairsExistingVarOrder verifies resync repairs roots
@@ -292,57 +276,35 @@ vars:
 func TestUpdateRootTaskfileRepairsExistingVarOrder(t *testing.T) {
 	t.Parallel()
 
-	input := goOnlyRootInput()
-	input.ModuleTaskfiles = map[string][]byte{consts.Go: []byte(`version: '3'
-vars:
-  Z_SCANNERS: '{{.Z_SCANNERS | default "vuln,secret"}}'
-  A_ARGS: >-
-    {{.A_ARGS | default (printf "--scanners %s" .Z_SCANNERS)}}
-`)}
-	root := []byte(`version: '3'
-vars:
-  CUSTOM_BEFORE: before
-  # Keep the custom policy.
-  A_ARGS: >-
-    {{printf "--scanners %s --exit-code 0" .Z_SCANNERS}}
-  CUSTOM_MIDDLE: middle
-  # Keep the custom scanners.
-  Z_SCANNERS: misconfig
-  CUSTOM_AFTER: after
-`)
+	input := orderedModuleVarsInput()
 
-	out, err := taskfile.UpdateRootTaskfile(root, input)
+	out, err := taskfile.UpdateRootTaskfile(rootWithUnorderedVars(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	text := string(out)
-	wantOrder := []string{"  CUSTOM_BEFORE:", "  Z_SCANNERS:", "  CUSTOM_MIDDLE:", "  A_ARGS:", "  CUSTOM_AFTER:"}
-	previous := -1
-	for _, key := range wantOrder {
-		position := strings.Index(text, key)
-		if position <= previous {
-			t.Fatalf("expected repaired vars order %v:\n%s", wantOrder, out)
-		}
+	assertRepairedVars(t, string(out))
+	assertVarOrderResync(t, out, input)
+}
 
-		previous = position
-	}
+// TestUpdateRootTaskfileVarOrderWithVarlessModule verifies modules without vars
+// do not interfere with ordered promotion from other modules.
+func TestUpdateRootTaskfileVarOrderWithVarlessModule(t *testing.T) {
+	t.Parallel()
 
-	assertContainsAll(t, text, []string{
-		"# Keep the custom policy.",
-		"# Keep the custom scanners.",
-		`{{printf "--scanners %s --exit-code 0" .Z_SCANNERS}}`,
-		"Z_SCANNERS: misconfig",
-	})
+	input := orderedModuleVarsInput()
 
-	resynced, err := taskfile.UpdateRootTaskfile(out, input)
+	input.Tasks = append(input.Tasks, taskESLint)
+	input.DestByTask[taskESLint] = taskESLint
+	input.ModuleTaskfiles[taskESLint] = taskfile.NewRootTemplate()
+
+	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !bytes.Equal(out, resynced) {
-		t.Fatalf("repaired variable order changed on resync:\n%s", resynced)
-	}
+	assertVarOrder(t, string(out), []string{scannersVarKey, argsVarKey})
+	assertContainsAll(t, string(out), []string{pathTaskfilesESLintYML})
 }
 
 // TestUpdateRootTaskfileCopiesFoldedVarsVerbatim verifies folded `>-` module
@@ -455,6 +417,76 @@ func TestRewriteUsesRealStoreSnippet(t *testing.T) {
 	if !strings.Contains(string(out), wantPnpmRewrite) {
 		t.Fatalf("rewrite failed: %s", out)
 	}
+}
+
+func assertRepairedVars(t *testing.T, text string) {
+	t.Helper()
+
+	assertVarOrder(t, text, []string{
+		"  CUSTOM_BEFORE:", scannersVarKey, "  CUSTOM_MIDDLE:", argsVarKey, "  CUSTOM_AFTER:",
+	})
+	assertContainsAll(t, text, []string{
+		"# Keep the custom policy.",
+		"# Keep the custom scanners.",
+		`{{printf "--scanners %s --exit-code 0" .Z_SCANNERS}}`,
+		"Z_SCANNERS: misconfig",
+	})
+}
+
+func assertVarOrder(t *testing.T, text string, wantOrder []string) {
+	t.Helper()
+
+	previous := -consts.IndexOne
+
+	for idx := range wantOrder {
+		position := strings.Index(text, wantOrder[idx])
+
+		if position <= previous {
+			t.Fatalf("expected vars order %v:\n%s", wantOrder, text)
+		}
+
+		previous = position
+	}
+}
+
+func assertVarOrderResync(t *testing.T, out []byte, input *rootupd.RootUpdateInput) {
+	t.Helper()
+
+	resynced, err := taskfile.UpdateRootTaskfile(out, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out, resynced) {
+		t.Fatalf("variable order changed on resync:\n%s", resynced)
+	}
+}
+
+func orderedModuleVarsInput() *rootupd.RootUpdateInput {
+	input := goOnlyRootInput()
+
+	input.ModuleTaskfiles = map[string][]byte{consts.Go: []byte(`version: '3'
+vars:
+  Z_SCANNERS: '{{.Z_SCANNERS | default "vuln,secret"}}'
+  A_ARGS: >-
+    {{.A_ARGS | default (printf "--scanners %s" .Z_SCANNERS)}}
+`)}
+
+	return input
+}
+
+func rootWithUnorderedVars() []byte {
+	return []byte(`version: '3'
+vars:
+  CUSTOM_BEFORE: before
+  # Keep the custom policy.
+  A_ARGS: >-
+    {{printf "--scanners %s --exit-code 0" .Z_SCANNERS}}
+  CUSTOM_MIDDLE: middle
+  # Keep the custom scanners.
+  Z_SCANNERS: misconfig
+  CUSTOM_AFTER: after
+`)
 }
 
 func rewriteIncludesInput() []byte {
@@ -682,7 +714,7 @@ func assertUpdateRootTaskfileOutput(t *testing.T, text string) {
 
 	assertContainsAll(t, text, []string{
 		pathTaskfilesGoYML,
-		"taskfiles/eslint/Taskfile.yml",
+		pathTaskfilesESLintYML,
 		"custom/Taskfile.yml",
 		wantIncludeDirDot,
 	})

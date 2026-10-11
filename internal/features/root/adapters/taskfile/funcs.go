@@ -912,6 +912,7 @@ func overlayOneRawVar(dst, src map[string]string, key string) {
 	if src[key] == consts.Empty {
 		return
 	}
+
 	if dst[key] != consts.Empty {
 		return
 	}
@@ -1397,33 +1398,49 @@ func appendRawBlockVars(out map[string]string, content []byte, varsNode *yaml.No
 			value:   varsNode.Content[idx+consts.IndexOne],
 		})
 	}
-
 }
 
 func reorderPromotedVars(rootVars *yaml.Node, keys []string) {
-	pairs := make(map[string][]*yaml.Node, len(keys))
-	for idx := consts.IndexZero; idx < len(rootVars.Content); idx += yamlMappingPairKeyValue {
-		key := rootVars.Content[idx].Value
-		pairs[key] = rootVars.Content[idx : idx+yamlMappingPairKeyValue]
-	}
+	pairs := mappingPairs(rootVars)
 
 	ordered := make([]*yaml.Node, consts.IndexZero, len(keys)*yamlMappingPairKeyValue)
 	managed := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		ordered = append(ordered, pairs[key]...)
-		managed[key] = struct{}{}
+
+	for idx := range keys {
+		ordered = append(ordered, pairs[keys[idx]]...)
+		managed[keys[idx]] = struct{}{}
 	}
 
+	replacePromotedVarPairs(rootVars, ordered, managed)
+}
+
+func mappingPairs(mapNode *yaml.Node) map[string][]*yaml.Node {
+	pairs := make(map[string][]*yaml.Node, len(mapNode.Content)/yamlMappingPairKeyValue)
+
+	for idx := consts.IndexZero; idx < len(mapNode.Content); idx += yamlMappingPairKeyValue {
+		pairs[mapNode.Content[idx].Value] = mapNode.Content[idx : idx+yamlMappingPairKeyValue]
+	}
+
+	return pairs
+}
+
+func replacePromotedVarPairs(
+	rootVars *yaml.Node,
+	ordered []*yaml.Node,
+	managed map[string]struct{},
+) {
 	// Move complete key/value pairs, retaining custom values and comments.
 	// Unrelated root variables keep their existing slots and relative order.
 	next := consts.IndexZero
 	content := slices.Clone(rootVars.Content)
+
 	for idx := consts.IndexZero; idx < len(content); idx += yamlMappingPairKeyValue {
 		if _, ok := managed[content[idx].Value]; !ok {
 			continue
 		}
 
 		copy(content[idx:idx+yamlMappingPairKeyValue], ordered[next:next+yamlMappingPairKeyValue])
+
 		next += yamlMappingPairKeyValue
 	}
 
@@ -2137,21 +2154,33 @@ func orderedPromotedVarKeys(params *promotedVarParams) []string {
 
 	// Task evaluates vars in declaration order. Preserve the module's order so
 	// templates can reference earlier vars, including in copied block scalars.
-	for _, task := range params.tasks {
-		varsNode := params.moduleVars[task]
+	for idx := range params.tasks {
+		varsNode := params.moduleVars[params.tasks[idx]]
+
 		if !hasModuleVars(varsNode) {
 			continue
 		}
 
-		for idx := consts.IndexZero; idx < len(varsNode.Content); idx += yamlMappingPairKeyValue {
-			key := varsNode.Content[idx].Value
-			if _, exists := seen[key]; exists {
-				continue
-			}
+		keys = appendUniqueMappingKeys(varsNode, keys, seen)
+	}
 
-			seen[key] = struct{}{}
-			keys = append(keys, key)
+	return keys
+}
+
+func appendUniqueMappingKeys(
+	varsNode *yaml.Node,
+	keys []string,
+	seen map[string]struct{},
+) []string {
+	for idx := consts.IndexZero; idx < len(varsNode.Content); idx += yamlMappingPairKeyValue {
+		key := varsNode.Content[idx].Value
+
+		if _, exists := seen[key]; exists {
+			continue
 		}
+
+		seen[key] = struct{}{}
+		keys = append(keys, key)
 	}
 
 	return keys
