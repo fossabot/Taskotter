@@ -1,6 +1,6 @@
 ---
-# Ignore specific security findings.
-ignorefile: .trivyignore
+# Ignore documented findings only for their specified paths.
+ignorefile: .trivyignore.yaml
 
 scan:
   # Exclude test data from all security scanners.

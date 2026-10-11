@@ -1,0 +1,16 @@
+---
+misconfigurations:
+  - id: AVD-DS-0002
+    paths:
+      - Dockerfile
+    statement: >-
+      GitHub Docker actions must run as root to access the mounted
+      GITHUB_WORKSPACE. See
+      https://docs.github.com/en/actions/reference/workflows-and-actions/dockerfile-support#user.
+  - id: AVD-DS-0026
+    paths:
+      - Dockerfile
+    statement: >-
+      TaskOtter is a one-shot GitHub Action that exits after syncing taskfiles.
+      It does not run a service that needs a periodic container health check;
+      the process exit status reports success or failure to the runner.
