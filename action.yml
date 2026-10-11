@@ -9,7 +9,9 @@ branding:
 
 inputs:
   tasks:
-    description: Comma-separated or multiline list of logical task names (for example go, eslint, prettier, typescript, hadolint).
+    description: >-
+      Comma-separated or multiline list of logical task names
+      (for example go, eslint, prettier, typescript, hadolint).
     required: true
   js:
     description: |
