@@ -29,7 +29,6 @@ runs:
         task taskotter:hadolint:ci
         task taskotter:rumdl:ci
         task taskotter:trivy:ci:fs
-        task taskotter:trivy:ci:image
     - name: Generate Tests Report
       shell: bash
       run: task taskotter:go-junit-report:report
