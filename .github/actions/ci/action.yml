@@ -14,12 +14,7 @@ runs:
       uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e  # v2.2.0
     - name: Run CI and fix fixable issues
       shell: bash
-      run: |
-        task taskotter:golangci-lint:ci
-        # The built-in Actions token cannot push workflow-file changes to the
-        # automated PR branch. Keep workflows read-only in this autofix run;
-        # they are still checked by actionlint, zizmor, and yamllint below.
-        YAMLFIX_EXTRA_ARGS='--exclude .github/workflows/**' task taskotter:yamlfix:ci:fix
+      run: YAMLFIX_EXTRA_ARGS='--exclude ".github/workflows/**/*" --exclude "taskotter/**/*"' task taskotter:ci:fix
     - name: Create fix PR
       uses: $/.github/actions/auto-fix
       with:
@@ -32,6 +27,9 @@ runs:
         task taskotter:actionlint:ci
         task taskotter:zizmor:ci
         task taskotter:hadolint:ci
+        task taskotter:rumdl:ci
+        task taskotter:trivy:fs
+        task taskotter:trivy:image
     - name: Generate Tests Report
       shell: bash
       run: task taskotter:go-junit-report:report
