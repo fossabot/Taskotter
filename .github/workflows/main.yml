@@ -1,10 +1,13 @@
 ---
 name: Test TaskOtter
+
 on:
-  push:
-  pull_request:
+  push: null
+  pull_request: null
+
 permissions:
   contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest

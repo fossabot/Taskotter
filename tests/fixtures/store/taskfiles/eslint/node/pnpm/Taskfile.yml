@@ -1,10 +1,13 @@
 ---
-version: "3"
+version: '3'
+
 includes:
   pnpm:
     taskfile: ../../../pnpm/Taskfile.yml
+
 vars:
-  NODE_VERSION: "24"
+  NODE_VERSION: '24'
+
 tasks:
   install:
     cmds:

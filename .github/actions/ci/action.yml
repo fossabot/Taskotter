@@ -1,11 +1,12 @@
 ---
 name: Go CI
-description: Run Task-based CI, autofix issues, generate test reports, and upload
-  coverage/results to Codecov
+description: Run Task-based CI, autofix issues, generate test reports, and upload coverage/results to Codecov
+
 inputs:
   github-token:
     description: GitHub token used for automated fixes
     required: true
+
 runs:
   using: composite
   steps:

@@ -1,7 +1,9 @@
 ---
-version: "3"
+version: '3'
+
 vars:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: 1.26.5
+
 tasks:
   install:
     cmds:

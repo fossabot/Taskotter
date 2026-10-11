@@ -1,6 +1,7 @@
 ---
 name: CodSpeed Benchmarks
 description: Run Go benchmarks with CodSpeed
+
 inputs:
   mode:
     description: CodSpeed measurement mode
@@ -10,6 +11,7 @@ inputs:
     description: Command used to run Go benchmarks
     required: false
     default: go test -bench=. ./...
+
 runs:
   using: composite
   steps:

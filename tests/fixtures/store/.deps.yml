@@ -1,4 +1,6 @@
 ---
 go: []
 pnpm: []
-eslint/node/pnpm: [pnpm]
+
+eslint/node/pnpm:
+  - pnpm

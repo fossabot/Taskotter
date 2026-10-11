@@ -2,13 +2,14 @@
 name: TaskOtter Sync
 description: Synchronize taskfiles from the TaskOtter store into your repository.
 author: task-otter
+
 branding:
   icon: package
   color: blue
+
 inputs:
   tasks:
-    description: Comma-separated or multiline list of logical task names (for example
-      go, eslint, prettier, typescript, hadolint).
+    description: Comma-separated or multiline list of logical task names (for example go, eslint, prettier, typescript, hadolint).
     required: true
   js:
     description: |
@@ -51,12 +52,12 @@ inputs:
       Use in CI jobs that should block until the sync PR is merged.
     required: false
     default: 'false'
+
 outputs:
   changed:
     description: Whether repository changes were generated.
   store-version:
-    description: Requested store tag, or empty when the latest default branch was
-      used.
+    description: Requested store tag, or empty when the latest default branch was used.
   source-ref:
     description: Resolved source reference (refs/tags/... or refs/heads/...).
   source-sha:
@@ -71,6 +72,7 @@ outputs:
     description: Created or updated pull request number.
   pull-request-url:
     description: Created or updated pull request URL.
+
 runs:
   using: docker
   image: Dockerfile

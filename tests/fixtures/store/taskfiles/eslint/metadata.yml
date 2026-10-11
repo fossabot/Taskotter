@@ -2,5 +2,12 @@
 schema: taskotter.dev/taskfile-metadata/v1
 module: eslint
 taskfile: Taskfile.yml
-exported_tasks: [install, lint, lint:fix, version]
-variants: [node/pnpm]
+
+exported_tasks:
+  - install
+  - lint
+  - lint:fix
+  - version
+
+variants:
+  - node/pnpm
