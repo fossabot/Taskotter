@@ -252,6 +252,99 @@ func TestUpdateRootTaskfileGeneratedTasksAndPromotedVars(t *testing.T) {
 	assertGeneratedTasksAndPromotedVars(t, string(out))
 }
 
+// TestUpdateRootTaskfilePreservesModuleVarOrder keeps dependent templates after
+// their inputs, as required by Task's variable evaluation order.
+func TestUpdateRootTaskfilePreservesModuleVarOrder(t *testing.T) {
+	t.Parallel()
+
+	input := goOnlyRootInput()
+	input.ModuleTaskfiles = map[string][]byte{consts.Go: []byte(`version: '3'
+vars:
+  Z_SCANNERS: '{{.Z_SCANNERS | default "vuln,secret"}}'
+  A_ARGS: >-
+    {{.A_ARGS | default (printf "--scanners %s" .Z_SCANNERS)}}
+`)}
+
+	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text := string(out)
+	scanners := strings.Index(text, "  Z_SCANNERS:")
+	args := strings.Index(text, "  A_ARGS:")
+	if scanners < 0 || args < 0 || scanners >= args {
+		t.Fatalf("dependent args must follow scanners in root vars:\n%s", out)
+	}
+
+	resynced, err := taskfile.UpdateRootTaskfile(out, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out, resynced) {
+		t.Fatalf("variable order changed on resync:\n%s", resynced)
+	}
+}
+
+// TestUpdateRootTaskfileRepairsExistingVarOrder verifies resync repairs roots
+// from the old alphabetic generator without replacing user values or comments.
+func TestUpdateRootTaskfileRepairsExistingVarOrder(t *testing.T) {
+	t.Parallel()
+
+	input := goOnlyRootInput()
+	input.ModuleTaskfiles = map[string][]byte{consts.Go: []byte(`version: '3'
+vars:
+  Z_SCANNERS: '{{.Z_SCANNERS | default "vuln,secret"}}'
+  A_ARGS: >-
+    {{.A_ARGS | default (printf "--scanners %s" .Z_SCANNERS)}}
+`)}
+	root := []byte(`version: '3'
+vars:
+  CUSTOM_BEFORE: before
+  # Keep the custom policy.
+  A_ARGS: >-
+    {{printf "--scanners %s --exit-code 0" .Z_SCANNERS}}
+  CUSTOM_MIDDLE: middle
+  # Keep the custom scanners.
+  Z_SCANNERS: misconfig
+  CUSTOM_AFTER: after
+`)
+
+	out, err := taskfile.UpdateRootTaskfile(root, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text := string(out)
+	wantOrder := []string{"  CUSTOM_BEFORE:", "  Z_SCANNERS:", "  CUSTOM_MIDDLE:", "  A_ARGS:", "  CUSTOM_AFTER:"}
+	previous := -1
+	for _, key := range wantOrder {
+		position := strings.Index(text, key)
+		if position <= previous {
+			t.Fatalf("expected repaired vars order %v:\n%s", wantOrder, out)
+		}
+
+		previous = position
+	}
+
+	assertContainsAll(t, text, []string{
+		"# Keep the custom policy.",
+		"# Keep the custom scanners.",
+		`{{printf "--scanners %s --exit-code 0" .Z_SCANNERS}}`,
+		"Z_SCANNERS: misconfig",
+	})
+
+	resynced, err := taskfile.UpdateRootTaskfile(out, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out, resynced) {
+		t.Fatalf("repaired variable order changed on resync:\n%s", resynced)
+	}
+}
+
 // TestUpdateRootTaskfileCopiesFoldedVarsVerbatim verifies folded `>-` module
 // vars keep their original characters when promoted to the root Taskfile.
 func TestUpdateRootTaskfileCopiesFoldedVarsVerbatim(t *testing.T) {
