@@ -8,7 +8,7 @@ links:
   kind: refines
 ---
 
-# Split oversized feature packages by capability
+# Split Oversized Feature Packages by Capability
 
 ## Context and Problem Statement
 

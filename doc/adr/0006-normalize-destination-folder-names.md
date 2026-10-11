@@ -8,7 +8,7 @@ links:
     kind: relatesto
 ---
 
-# Normalize destination folder names
+# Normalize Destination Folder Names
 
 ## Context and Problem Statement
 
@@ -42,17 +42,17 @@ Chosen option: "Strip package-manager (and related) suffixes to a logical destin
 
 ## Pros and Cons of the Options
 
-### Strip package-manager (and related) suffixes to a logical destination name
+### Strip Package-Manager (And Related) Suffixes to a Logical Destination Name
 
 * Good, because matches how users think about tools (`eslint`, `pnpm`)
 * Bad, because encoding of “known suffixes” must stay aligned with the store
 
-### Mirror full store paths under `target-folder`
+### Mirror Full Store Paths Under `target-folder`
 
 * Good, because lossless mapping
 * Bad, because path churn and deep trees when JS settings change
 
-### Hash or encode full source paths into opaque folder names
+### Hash or Encode Full Source Paths into Opaque Folder Names
 
 * Good, because collision-free
 * Bad, because opaque includes hurt usability

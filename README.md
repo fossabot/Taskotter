@@ -12,15 +12,15 @@ Sync pull requests target the branch that invoked TaskOtter. For pull-request wo
 
 ## Features
 
-- Validates all inputs before modifying files
-- Resolves logical task names to store variants (`eslint` + `pnpm` → `eslint/node/pnpm`)
-- Recursively resolves dependencies from `.deps.yml`, including slashed variant modules (`eslint/node/pnpm` → `taskfiles/eslint/node/pnpm`)
-- Supports latest default branch or a pinned store Git tag
-- Normalizes destination directories (`eslint/node/pnpm` → `taskfiles/eslint`)
-- Rewrites internal Taskfile dependency includes to normalized paths
-- Tracks managed files in `<target-folder>/.taskotter-lock.yml`
-- Creates or updates a deterministic PR branch `taskotter/sync-<configuration-hash>`
-- Never executes downloaded Taskfiles or scripts
+* Validates all inputs before modifying files
+* Resolves logical task names to store variants (`eslint` + `pnpm` → `eslint/node/pnpm`)
+* Recursively resolves dependencies from `.deps.yml`, including slashed variant modules (`eslint/node/pnpm` → `taskfiles/eslint/node/pnpm`)
+* Supports latest default branch or a pinned store Git tag
+* Normalizes destination directories (`eslint/node/pnpm` → `taskfiles/eslint`)
+* Rewrites internal Taskfile dependency includes to normalized paths
+* Tracks managed files in `<target-folder>/.taskotter-lock.yml`
+* Creates or updates a deterministic PR branch `taskotter/sync-<configuration-hash>`
+* Never executes downloaded Taskfiles or scripts
 
 ## Permissions
 
@@ -33,7 +33,7 @@ permissions:
 ## Inputs
 
 | Input | Required | Default | Description |
-|-------|----------|---------|-------------|
+| ------- | ---------- | --------- | ------------- |
 | `tasks` | yes | — | Comma-separated or multiline list of logical task names (`eslint`, `go`, …) |
 | `github-token` | yes | — | Token used to authenticate git push (origin URL) and manage pull requests |
 | `js` | no | empty | YAML block for Node task resolution (see below) |
@@ -43,12 +43,12 @@ permissions:
 | `target-folder` | no | `taskfiles` | Repository-relative destination directory |
 | `fail-on-changes` | no | `false` | Exit with failure after opening or updating a sync pull request (for CI drift checks) |
 
-### `js` input
+### `js` Input
 
 Optional YAML block for resolving Node.js task variants. Omit when syncing non-Node tasks only.
 
 | Field | When | Default | Allowed values |
-|-------|------|---------|----------------|
+| ------- | ------ | --------- | ---------------- |
 | `runtime` | always | `nodejs` | `nodejs`, `bun` |
 | `package-manager` | `runtime: nodejs` | `npm` | `npm`, `yarn`, `pnpm` |
 
@@ -67,7 +67,7 @@ js: |
 ## Outputs
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `changed` | `true` when changes were generated |
 | `store-version` | Requested store tag, or empty for latest default branch |
 | `source-ref` | Resolved source reference (`refs/tags/...` or `refs/heads/...`) |
@@ -80,7 +80,7 @@ js: |
 
 ## Usage
 
-### Latest store version
+### Latest Store Version
 
 ```yaml
 name: TaskOtter
@@ -119,7 +119,7 @@ jobs:
           target-folder: taskfiles
 ```
 
-### CI drift check
+### CI Drift Check
 
 Use `fail-on-changes: true` in jobs that should block when TaskOtter opens a sync pull request. The action exits with a clear `::error` annotation and fails the job until the PR is merged.
 
@@ -152,7 +152,7 @@ jobs:
       - run: echo "runs only when taskfiles are in sync"
 ```
 
-### Pinned store tag
+### Pinned Store Tag
 
 ```yaml
 - uses: task-otter/Taskotter@v1
@@ -169,7 +169,7 @@ jobs:
       package-manager: pnpm
 ```
 
-### Bun runtime
+### Bun Runtime
 
 ```yaml
 - uses: task-otter/Taskotter@v1
@@ -184,7 +184,7 @@ jobs:
     includes-doc: false
 ```
 
-### Non-Node tasks only
+### Non-Node Tasks Only
 
 ```yaml
 - uses: task-otter/Taskotter@v1
@@ -206,14 +206,14 @@ When synced modules share exported task names in store metadata, TaskOtter also 
 
 ## Behavior
 
-### Module resolution
+### Module Resolution
 
-- Non-Node tasks (`go`, `docker`, `shellcheck`, …) resolve directly by name
-- Node tasks require the `js` input
-- `runtime: nodejs` uses `package-manager` (default `npm`)
-- `runtime: bun` ignores `package-manager`
+* Non-Node tasks (`go`, `docker`, `shellcheck`, …) resolve directly by name
+* Node tasks require the `js` input
+* `runtime: nodejs` uses `package-manager` (default `npm`)
+* `runtime: bun` ignores `package-manager`
 
-### Destination layout
+### Destination Layout
 
 Modules copy to `<target-folder>/<normalized-name>/`:
 
@@ -224,22 +224,22 @@ taskfiles/nodejs/Taskfile.yml      ← nodejs
 taskfiles/nix/Taskfile.yml         ← nix
 ```
 
-### Lock file and metadata
+### Lock File and Metadata
 
-- Lock file: `<target-folder>/.taskotter-lock.yml`
-- Metadata: `<target-folder>/.taskotter/metadata.yml`
+* Lock file: `<target-folder>/.taskotter-lock.yml`
+* Metadata: `<target-folder>/.taskotter/metadata.yml`
 
-### Pull requests
+### Pull Requests
 
-- Branch: `taskotter/sync-<configuration-hash>`
-- Title: `chore(taskotter): sync taskfiles`
-- Updates an existing open PR for the same branch instead of creating duplicates
-- No commit or PR when synchronized content is unchanged
+* Branch: `taskotter/sync-<configuration-hash>`
+* Title: `chore(taskotter): sync taskfiles`
+* Updates an existing open PR for the same branch instead of creating duplicates
+* No commit or PR when synchronized content is unchanged
 
-## Validation failures
+## Validation Failures
 
 | Condition | Result |
-|-----------|--------|
+| ----------- | -------- |
 | Empty or invalid task names | Fail before download |
 | Missing store task or variant | Fail with close matches |
 | Any use of the removed `js.version-manager` | Fail |
@@ -251,7 +251,7 @@ taskfiles/nix/Taskfile.yml         ← nix
 | Unmanaged existing destination directory | Fail |
 | Destination name collision | Fail |
 
-## Architecture decisions
+## Architecture Decisions
 
 Product and architecture decisions are recorded as ADRs under [`doc/adr/`](doc/adr/) (see the [TOC](doc/adr/README.md)).
 
@@ -280,11 +280,11 @@ codspeed run --mode walltime -- go test -bench=. ./...
 
 ## Security
 
-- Input validation before any filesystem writes
-- Secure tar.gz extraction with size limits and traversal protection
-- Git invoked with argument arrays (no shell interpolation)
-- GitHub token is never logged
-- Downloaded Taskfiles and scripts are never executed
+* Input validation before any filesystem writes
+* Secure tar.gz extraction with size limits and traversal protection
+* Git invoked with argument arrays (no shell interpolation)
+* GitHub token is never logged
+* Downloaded Taskfiles and scripts are never executed
 
 ## License
 

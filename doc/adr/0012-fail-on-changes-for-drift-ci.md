@@ -8,7 +8,7 @@ links:
     kind: relatesto
 ---
 
-# Fail-on-changes for drift CI
+# Fail-on-Changes for Drift CI
 
 ## Context and Problem Statement
 
@@ -42,17 +42,17 @@ Chosen option: "`fail-on-changes` input: non-zero exit and `::error` when a sync
 
 ## Pros and Cons of the Options
 
-### `fail-on-changes` input: non-zero exit and `::error` when a sync PR is opened/updated
+### `fail-on-changes` Input: Non-Zero Exit and `::error` When a Sync PR Is Opened/updated
 
 * Good, because one action serves both sync-bot and gate modes
 * Neutral, because consumers must wire the flag intentionally
 
-### Always fail the action whenever files change
+### Always Fail the Action Whenever Files Change
 
 * Good, because strict by default
 * Bad, because breaks scheduled sync workflows that expect success after opening a PR
 
-### Never fail; rely only on outputs/`changed`
+### Never Fail; Rely Only on Outputs/`changed`
 
 * Good, because simplest exit semantics
 * Bad, because easy to ignore drift without extra scripting

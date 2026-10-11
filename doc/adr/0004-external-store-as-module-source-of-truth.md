@@ -12,7 +12,7 @@ links:
     kind: relatesto
 ---
 
-# External store as module source of truth
+# External Store as Module Source of Truth
 
 ## Context and Problem Statement
 
@@ -46,17 +46,17 @@ README security note and features list; store client under `internal/features/st
 
 ## Pros and Cons of the Options
 
-### Sync from an external TaskOtter store repository (download/archive), never execute content
+### Sync from an External TaskOtter Store Repository (Download/archive), Never Execute Content
 
 * Good, because clear separation of catalog vs sync engine
 * Good, because pinned tags support reproducible consumer CI
 
-### Vendor modules inside the TaskOtter action image
+### Vendor Modules Inside the TaskOtter Action Image
 
 * Good, because offline-friendly
 * Bad, because every module change requires an action release
 
-### Clone consumer-supplied arbitrary git URLs as module sources
+### Clone Consumer-Supplied Arbitrary Git URLs as Module Sources
 
 * Good, because flexible
 * Bad, because weak trust model and harder UX/validation

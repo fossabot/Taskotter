@@ -12,7 +12,7 @@ links:
     kind: amends
 ---
 
-# Flattened node variants and public install tasks
+# Flattened Node Variants and Public Install Tasks
 
 ## Context and Problem Statement
 
@@ -74,17 +74,17 @@ the contract tests in `internal/features/store/service/local_test.go`.
 
 ## Pros and Cons of the Options
 
-### Follow the store: drop the version-manager dimension and pin the metadata schema
+### Follow the Store: Drop the Version-Manager Dimension and Pin the Metadata Schema
 
 * Good, because the code models exactly one store layout
 * Bad, because it breaks existing workflow YAML
 
-### Keep `js.version-manager` as an accepted no-op
+### Keep `js.version-manager` as an Accepted No-Op
 
 * Good, because existing workflows keep running unchanged
 * Bad, because the input would quietly stop meaning anything, which is worse than a clear failure
 
-### Map old variant names onto new ones inside the resolver
+### Map Old Variant Names Onto New Ones Inside the Resolver
 
 * Good, because both old and new spellings resolve
 * Bad, because it carries the deleted layout forward indefinitely in translation tables

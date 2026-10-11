@@ -8,7 +8,7 @@ links:
     kind: relatesto
 ---
 
-# Selective file copy
+# Selective File Copy
 
 ## Context and Problem Statement
 
@@ -42,17 +42,17 @@ Chosen option: "Skip `*_test.*` and module metadata; copy `README.md`/`docs/` on
 
 ## Pros and Cons of the Options
 
-### Skip `*_test.*` and module metadata; copy `README.md`/`docs/` only when `includes-doc: true`
+### Skip `*_test.*` and Module Metadata; Copy `README.md`/`docs/` Only When `includes-doc: true`
 
 * Good, because tunable docs without always shipping tests
 * Neutral, because skip rules must stay documented for store authors
 
-### Always copy the entire module directory
+### Always Copy the Entire Module Directory
 
 * Good, because lossless
 * Bad, because noisy PRs and unused test files in consumers
 
-### Never copy documentation
+### Never Copy Documentation
 
 * Good, because minimal
 * Bad, because hurts discoverability of module usage

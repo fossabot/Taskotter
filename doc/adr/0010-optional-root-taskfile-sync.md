@@ -8,7 +8,7 @@ links:
     kind: relatesto
 ---
 
-# Optional root Taskfile sync
+# Optional Root Taskfile Sync
 
 ## Context and Problem Statement
 
@@ -42,17 +42,17 @@ Chosen option: "Optional `sync-root` (default true) merging managed includes and
 
 ## Pros and Cons of the Options
 
-### Optional `sync-root` (default true) merging managed includes and top-level module `vars`
+### Optional `sync-root` (Default True) Merging Managed Includes and Top-Level Module `vars`
 
 * Good, because balances onboarding and escape hatch
 * Neutral, because root task generation depends on store metadata quality
 
-### Always rewrite the entire root Taskfile
+### Always Rewrite the Entire Root Taskfile
 
 * Good, because simpler code
 * Bad, because destroys consumer custom tasks
 
-### Never touch the root Taskfile (documentation-only includes)
+### Never Touch the Root Taskfile (Documentation-Only Includes)
 
 * Good, because zero surprise edits
 * Bad, because weaker out-of-the-box experience

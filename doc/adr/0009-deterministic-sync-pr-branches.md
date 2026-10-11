@@ -10,7 +10,7 @@ links:
     kind: relatesto
 ---
 
-# Deterministic sync PR branches
+# Deterministic Sync PR Branches
 
 ## Context and Problem Statement
 
@@ -44,17 +44,17 @@ Chosen option: "Branch `taskotter/sync-<configuration-hash>` with update-in-plac
 
 ## Pros and Cons of the Options
 
-### Branch `taskotter/sync-<configuration-hash>` with update-in-place PR
+### Branch `taskotter/sync-<configuration-hash>` with Update-in-Place PR
 
 * Good, because deterministic and review-friendly
 * Neutral, because hash opacity requires PR body/metadata for human context
 
-### Timestamped branch per run (`taskotter/sync-YYYYMMDD…`)
+### Timestamped Branch per Run (`taskotter/sync-YYYYMMDD…`)
 
 * Good, because history of attempts
 * Bad, because PR spam and harder automation
 
-### Commit directly to the default branch without a PR
+### Commit Directly to the Default Branch Without a PR
 
 * Good, because fewer steps
 * Bad, because bypasses review and is unsafe for many orgs
