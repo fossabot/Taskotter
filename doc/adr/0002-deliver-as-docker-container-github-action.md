@@ -8,7 +8,7 @@ links:
     kind: relatesto
 ---
 
-# Deliver as Docker container GitHub Action
+# Deliver as Docker Container GitHub Action
 
 ## Context and Problem Statement
 
@@ -42,18 +42,18 @@ Chosen option: "Docker container action (`runs.using: docker`, image from repo `
 
 ## Pros and Cons of the Options
 
-### Docker container action (`runs.using: docker`, image from repo `Dockerfile`)
+### Docker Container Action (`runs.using: docker`, Image from Repo `Dockerfile`)
 
 * Good, because Go + git are baked in; no runner setup-go required for the action itself
 * Good, because CGO-disabled static binary keeps the runtime image small
 * Bad, because image pull/build cost on cold runners
 
-### JavaScript/TypeScript composite or Node action wrapping a downloaded binary
+### JavaScript/TypeScript Composite or Node Action Wrapping a Downloaded Binary
 
 * Good, because often faster cold start
 * Bad, because dual-language release surface and platform binary matrix
 
-### Composite action that installs Go and builds from source on each run
+### Composite Action That Installs Go and Builds from Source on Each Run
 
 * Good, because no image maintenance
 * Bad, because slow, network-heavy, and fragile for consumers

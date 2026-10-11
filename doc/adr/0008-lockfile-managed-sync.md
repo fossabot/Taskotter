@@ -14,7 +14,7 @@ links:
     kind: relatesto
 ---
 
-# Lockfile-managed sync
+# Lockfile-Managed Sync
 
 ## Context and Problem Statement
 
@@ -48,17 +48,17 @@ Lock model under `internal/features/state/lockmodel`; unmanaged destination test
 
 ## Pros and Cons of the Options
 
-### Track state in `<target-folder>/.taskotter-lock.yml` and reject unmanaged existing dirs
+### Track State in `<target-folder>/.taskotter-lock.yml` and Reject Unmanaged Existing Dirs
 
 * Good, because clear ownership and auditable managed file lists
 * Neutral, because lock YAML becomes part of the consumer repo
 
-### Always overwrite destination trees without a lock
+### Always Overwrite Destination Trees Without a Lock
 
 * Good, because simpler
 * Bad, because destructive for mixed or hand-edited folders
 
-### Require an empty `target-folder` on every sync
+### Require an Empty `target-folder` on Every Sync
 
 * Good, because no ownership ambiguity
 * Bad, because hostile to incremental PR-based workflows

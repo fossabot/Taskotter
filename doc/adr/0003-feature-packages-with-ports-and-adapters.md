@@ -10,7 +10,7 @@ links:
     kind: relatesto
 ---
 
-# Feature packages with ports and adapters
+# Feature Packages with Ports and Adapters
 
 ## Context and Problem Statement
 
@@ -44,17 +44,17 @@ Layout under `internal/features/{input,state,collect,root,plan,apply,orchestrato
 
 ## Pros and Cons of the Options
 
-### Feature packages with `ports/` and `adapters/`, plus `internal/shared/*`, wired in `cmd/taskotter-sync`
+### Feature Packages with `ports/` and `adapters/`, Plus `internal/shared/*`, Wired in `cmd/taskotter-sync`
 
 * Good, because matches hexagonal style without framework lock-in
 * Good, because orchestrator depends on ports, not adapter packages directly (except at wire time)
 
-### Single flat `internal/` package tree with concrete GitHub/FS calls everywhere
+### Single Flat `internal/` Package Tree with Concrete GitHub/FS Calls Everywhere
 
 * Good, because fewer packages
 * Bad, because hard to unit-test sync/PR flows without network/FS
 
-### Hexagonal layout per deployable with heavy DI frameworks
+### Hexagonal Layout per Deployable with Heavy DI Frameworks
 
 * Good, because explicit dependency graphs
 * Bad, because overkill for a single container entrypoint

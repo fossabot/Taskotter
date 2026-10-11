@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-04
 ---
 
-# Record architecture decisions
+# Record Architecture Decisions
 
 ## Context and Problem Statement
 
@@ -39,18 +39,18 @@ Presence of `adrs.toml` (`mode = "nextgen"`, MADR `full`), `doc/adr/` records, a
 
 ## Pros and Cons of the Options
 
-### Architecture Decision Records with MADR 4.0 (`full`) under `doc/adr`, managed by `adrs`
+### Architecture Decision Records with MADR 4.0 (`full`) Under `doc/adr`, Managed by `adrs`
 
 * Good, because structured sections fit multi-option product decisions
 * Good, because the repo already vendors `taskfiles/adrs`
 * Neutral, because tooling adds a Rust/`cargo` dependency for contributors who author ADRs
 
-### Informal README-only architecture sections
+### Informal README-Only Architecture Sections
 
 * Good, because no extra tooling
 * Bad, because README mixes user docs with decision history and lacks status/links
 
-### Nygard-style one-page ADRs without structured options/drivers
+### Nygard-Style One-Page ADRs Without Structured Options/drivers
 
 * Good, because short and familiar
 * Bad, because weaker capture of rejected alternatives for a product with many trade-offs

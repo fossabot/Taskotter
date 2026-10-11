@@ -14,7 +14,7 @@ links:
     kind: relatesto
 ---
 
-# Logical tasks and JS variant resolution
+# Logical Tasks and JS Variant Resolution
 
 > **Amended by [ADR 0013](0013-flattened-node-variants-and-public-install-tasks.md).** The store
 > dropped its version-manager dimension, so `js.version-manager` was removed and Node variant
@@ -53,17 +53,17 @@ Chosen option: "Logical task names plus unified `js` YAML (`runtime`, `package-m
 
 ## Pros and Cons of the Options
 
-### Logical task names plus unified `js` YAML (`runtime`, `package-manager`)
+### Logical Task Names Plus Unified `js` YAML (`runtime`, `package-manager`)
 
 * Good, because one YAML block scales as Node dimensions grow
 * Good, because defaults (`nodejs`/`npm`) cover common cases
 
-### Require full store module paths in `tasks`
+### Require Full Store Module Paths in `tasks`
 
 * Good, because explicit
 * Bad, because couples consumers to store layout and suffix conventions
 
-### Separate action inputs per Node dimension (legacy-style)
+### Separate Action Inputs per Node Dimension (Legacy-Style)
 
 * Good, because flat env mapping
 * Bad, because noisier Marketplace UI and harder grouped validation

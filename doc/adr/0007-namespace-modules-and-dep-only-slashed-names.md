@@ -10,7 +10,7 @@ links:
     kind: relatesto
 ---
 
-# Namespace modules and dep-only slashed names
+# Namespace Modules and Dep-Only Slashed Names
 
 > **Amended by [ADR 0013](0013-flattened-node-variants-and-public-install-tasks.md).** The store
 > removed its Taskfile-less namespace directories (`taskfiles/internal/`), so a directory is a
@@ -61,17 +61,17 @@ Store catalog walking in `internal/features/store/service/local.go` and its test
 
 ## Pros and Cons of the Options
 
-### Catalog nested modules under slashed names; allow those names only via dependency resolution; reject `/` in requested `tasks`
+### Catalog Nested Modules Under Slashed Names; Allow Those Names Only via Dependency Resolution; Reject `/` in Requested `tasks`
 
 * Good, because matches store layout without exposing path UX in `tasks`
 * Neutral, because nesting depth is bounded by what the store publishes
 
-### Allow consumers to request any store-relative path in `tasks`
+### Allow Consumers to Request Any Store-Relative Path in `tasks`
 
 * Good, because flexible
 * Bad, because weakens validation and confuses logical-task UX
 
-### Flatten nesting away so all modules are top-level names
+### Flatten Nesting Away so All Modules Are Top-Level Names
 
 * Good, because simpler destination map
 * Bad, because loses organizational grouping and risks name collisions
