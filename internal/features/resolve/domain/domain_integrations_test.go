@@ -18,22 +18,6 @@ const (
 	attemptedModule = "go/node/npm"
 )
 
-func assertContains(t *testing.T, msg, needle string) {
-	t.Helper()
-
-	if !strings.Contains(msg, needle) {
-		t.Fatalf(errorFmt, msg)
-	}
-}
-
-func assertOmits(t *testing.T, msg, needle string) {
-	t.Helper()
-
-	if strings.Contains(msg, needle) {
-		t.Fatalf(errorFmt, msg)
-	}
-}
-
 // TestResolveErrorMessageIncludesAllDetails verifies attempted module and close matches appear.
 func TestResolveErrorMessageIncludesAllDetails(t *testing.T) {
 	t.Parallel()
@@ -94,5 +78,21 @@ func TestResolveErrorTask(t *testing.T) {
 
 	if resolveErr.Task() != consts.Go {
 		t.Fatalf("Task() = %q", resolveErr.Task())
+	}
+}
+
+func assertContains(t *testing.T, msg, needle string) {
+	t.Helper()
+
+	if !strings.Contains(msg, needle) {
+		t.Fatalf(errorFmt, msg)
+	}
+}
+
+func assertOmits(t *testing.T, msg, needle string) {
+	t.Helper()
+
+	if strings.Contains(msg, needle) {
+		t.Fatalf(errorFmt, msg)
 	}
 }

@@ -84,14 +84,6 @@ const (
 	testToken = "token"
 )
 
-func resolveRefErrorCases() []refErrCase {
-	return []refErrCase{
-		{name: "metadata not ok", status: http.StatusInternalServerError, body: bodyEmptyJSON},
-		{name: "empty default branch", status: http.StatusOK, body: `{"default_branch":""}`},
-		{name: caseInvalidJSON, status: http.StatusOK, body: bodyMalformedJSON},
-	}
-}
-
 // TestDownloadSnapshotInvalidArchiveCleansUp verifies a non-gzip response errors and leaves no snapshot dir.
 func TestDownloadSnapshotInvalidArchiveCleansUp(t *testing.T) {
 	t.Parallel()
@@ -286,6 +278,14 @@ func TestResolveTagErrors(t *testing.T) {
 
 			assertResolveTagStatusError(t, testCase.status, testCase.body)
 		})
+	}
+}
+
+func resolveRefErrorCases() []refErrCase {
+	return []refErrCase{
+		{name: "metadata not ok", status: http.StatusInternalServerError, body: bodyEmptyJSON},
+		{name: "empty default branch", status: http.StatusOK, body: `{"default_branch":""}`},
+		{name: caseInvalidJSON, status: http.StatusOK, body: bodyMalformedJSON},
 	}
 }
 

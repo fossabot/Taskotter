@@ -161,6 +161,152 @@ func TestOrchestratorHookFailures(t *testing.T) {
 	runNamedFailCases(t, hookFailCases())
 }
 
+// TestOrchestratorCreatesPRAgainstTriggerBranch verifies the expected behavior.
+func TestOrchestratorCreatesPRAgainstTriggerBranch(t *testing.T) {
+	t.Parallel()
+
+	pullReq := newMockPR(nil)
+	gitOps := newMockGitOps(false, consts.Empty)
+	runGitRepoOrchestrator(&gitRepoRunInput{
+		t: t, gitOps: gitOps, pr: pullReq, cfg: testConfigWithBaseBranch(testReleaseBranch),
+	})
+
+	assertPRCreated(&assertPRCreatedInput{
+		t: t, pullReq: pullReq, gitOps: gitOps,
+		wantBase: testReleaseBranch, wantDefaultBranchCalls: consts.IndexZero,
+	})
+}
+
+// TestOrchestratorCreatesPRWithResolvedBase verifies the expected behavior.
+func TestOrchestratorCreatesPRWithResolvedBase(t *testing.T) {
+	t.Parallel()
+
+	pullReq := newMockPR(nil)
+	gitOps := newMockGitOps(false, testDevelopBranch)
+	runGitRepoOrchestrator(&gitRepoRunInput{t: t, gitOps: gitOps, pr: pullReq, cfg: nil})
+
+	if pullReq.createdBase != testDevelopBranch {
+		t.Fatalf("created PR base = %q, want develop", pullReq.createdBase)
+	}
+}
+
+// TestOrchestratorLogsDependencies verifies the expected behavior.
+func TestOrchestratorLogsDependencies(t *testing.T) {
+	t.Parallel()
+
+	workspace := workspaceWithRootTaskfile(t)
+	cfg := testConfigEslintPnpm(workspace)
+	result := runOrchestrator(t, newTestOrchestrator(t, nil, nil), cfg)
+
+	if result.StoreVersion != testStoreVersion {
+		t.Fatalf("StoreVersion = %q, want %s", result.StoreVersion, testStoreVersion)
+	}
+
+	if result.ResolvedDependencies == emptyJSONArray {
+		t.Fatal("expected non-empty resolved dependencies")
+	}
+}
+
+// TestOrchestratorNoChangeAfterApply verifies the expected behavior.
+func TestOrchestratorNoChangeAfterApply(t *testing.T) {
+	t.Parallel()
+
+	workspace := workspaceWithRootTaskfile(t)
+	cfg := testConfig(workspace)
+	orchestrator := newTestOrchestrator(t, nil, nil)
+
+	first := runOrchestrator(t, orchestrator, cfg)
+
+	if !first.Changed {
+		t.Fatal("expected first run to change files")
+	}
+
+	second := runOrchestrator(t, orchestrator, cfg)
+
+	if second.Changed {
+		t.Fatal("expected no changes on second run")
+	}
+}
+
+// TestOrchestratorPreparesGitWorkspace verifies the expected behavior.
+func TestOrchestratorPreparesGitWorkspace(t *testing.T) {
+	t.Parallel()
+
+	gitWork := newMockWorkspace()
+	runPreparedGitWorkspace(t, gitWork)
+
+	if gitWork.safeCalls != consts.IndexOne {
+		t.Fatalf("EnsureSafeDirectory calls = %d", gitWork.safeCalls)
+	}
+}
+
+// TestOrchestratorReportsCleanupFailureQuietly verifies the expected behavior.
+func TestOrchestratorReportsCleanupFailureQuietly(t *testing.T) {
+	t.Parallel()
+
+	workspace := workspaceWithRootTaskfile(t)
+	cfg := testConfig(workspace)
+	store := newLocalStore(t)
+
+	store.cleanupErr = errTestBoom
+
+	deps, orch := newTestOrchestratorParts(&testOrchInput{
+		t: t, store: store, gitOps: nil, gitWork: nil, pullReq: nil,
+	})
+
+	iox.Discard(deps)
+
+	runOrchestrator(t, orch, cfg)
+}
+
+// TestOrchestratorUnrelatedDirtyTreeFails verifies the expected behavior.
+func TestOrchestratorUnrelatedDirtyTreeFails(t *testing.T) {
+	t.Parallel()
+
+	workspace := workspaceWithRootTaskfile(t)
+	cfg := testConfig(workspace)
+	orchestrator := newTestOrchestrator(t, newMockGitOps(true, consts.Empty), nil)
+
+	initGitWorkspace(t, workspace)
+
+	assertRunFails(t, orchestrator, cfg)
+	assertPathNotExist(t, filepath.Join(workspace, testTargetFolder, "go", "Taskfile.yml"))
+}
+
+// TestOrchestratorSkipsPRWithoutClient verifies the expected behavior.
+func TestOrchestratorSkipsPRWithoutClient(t *testing.T) {
+	t.Parallel()
+
+	gitOps := newMockGitOps(false, testMainBranch)
+	runGitRepoOrchestrator(&gitRepoRunInput{t: t, gitOps: gitOps, pr: nil, cfg: nil})
+}
+
+// TestOrchestratorUpdatesExistingPR verifies the expected behavior.
+func TestOrchestratorUpdatesExistingPR(t *testing.T) {
+	t.Parallel()
+
+	pullReq := newMockPR(&prdomain.PullRequest{Number: consts.IndexSeven, URL: testPRURLSeven})
+	gitOps := newMockGitOps(false, testMainBranch)
+	result := runGitRepoOrchestrator(&gitRepoRunInput{t: t, gitOps: gitOps, pr: pullReq, cfg: nil})
+
+	assertPRUpdated(&assertPRUpdatedInput{
+		t: t, pullReq: pullReq, gitOps: gitOps, result: result,
+		wantBase: testMainBranch, wantNum: "7",
+	})
+}
+
+// TestOrchestratorRunRequiresConfiguration verifies the expected behavior.
+func TestOrchestratorRunRequiresConfiguration(t *testing.T) {
+	t.Parallel()
+
+	result, err := new(service.Orchestrator).Run(t.Context(), &config.Config{})
+	iox.Discard(result)
+
+	if err == nil {
+		t.Fatal("expected configuration error")
+	}
+}
+
 func applyApplyPlanFail(env *failEnv) {
 	env.deps.ApplyPlan = func(*plan.Plan, *input.Input) error {
 		return errTestBoom
@@ -311,140 +457,6 @@ func setupUpdatePRErr(env *failEnv) {
 	env.pr.updateErr = errTestBoom
 }
 
-// TestOrchestratorCreatesPRAgainstTriggerBranch verifies the expected behavior.
-func TestOrchestratorCreatesPRAgainstTriggerBranch(t *testing.T) {
-	t.Parallel()
-
-	pullReq := newMockPR(nil)
-	gitOps := newMockGitOps(false, consts.Empty)
-	runGitRepoOrchestrator(&gitRepoRunInput{
-		t: t, gitOps: gitOps, pr: pullReq, cfg: testConfigWithBaseBranch(testReleaseBranch),
-	})
-
-	assertPRCreated(&assertPRCreatedInput{
-		t: t, pullReq: pullReq, gitOps: gitOps,
-		wantBase: testReleaseBranch, wantDefaultBranchCalls: consts.IndexZero,
-	})
-}
-
-// TestOrchestratorCreatesPRWithResolvedBase verifies the expected behavior.
-func TestOrchestratorCreatesPRWithResolvedBase(t *testing.T) {
-	t.Parallel()
-
-	pullReq := newMockPR(nil)
-	gitOps := newMockGitOps(false, testDevelopBranch)
-	runGitRepoOrchestrator(&gitRepoRunInput{t: t, gitOps: gitOps, pr: pullReq, cfg: nil})
-
-	if pullReq.createdBase != testDevelopBranch {
-		t.Fatalf("created PR base = %q, want develop", pullReq.createdBase)
-	}
-}
-
-// TestOrchestratorLogsDependencies verifies the expected behavior.
-func TestOrchestratorLogsDependencies(t *testing.T) {
-	t.Parallel()
-
-	workspace := workspaceWithRootTaskfile(t)
-	cfg := testConfigEslintPnpm(workspace)
-	result := runOrchestrator(t, newTestOrchestrator(t, nil, nil), cfg)
-
-	if result.StoreVersion != testStoreVersion {
-		t.Fatalf("StoreVersion = %q, want %s", result.StoreVersion, testStoreVersion)
-	}
-
-	if result.ResolvedDependencies == emptyJSONArray {
-		t.Fatal("expected non-empty resolved dependencies")
-	}
-}
-
-// TestOrchestratorNoChangeAfterApply verifies the expected behavior.
-func TestOrchestratorNoChangeAfterApply(t *testing.T) {
-	t.Parallel()
-
-	workspace := workspaceWithRootTaskfile(t)
-	cfg := testConfig(workspace)
-	orchestrator := newTestOrchestrator(t, nil, nil)
-
-	first := runOrchestrator(t, orchestrator, cfg)
-
-	if !first.Changed {
-		t.Fatal("expected first run to change files")
-	}
-
-	second := runOrchestrator(t, orchestrator, cfg)
-
-	if second.Changed {
-		t.Fatal("expected no changes on second run")
-	}
-}
-
-// TestOrchestratorPreparesGitWorkspace verifies the expected behavior.
-func TestOrchestratorPreparesGitWorkspace(t *testing.T) {
-	t.Parallel()
-
-	gitWork := newMockWorkspace()
-	runPreparedGitWorkspace(t, gitWork)
-
-	if gitWork.safeCalls != consts.IndexOne {
-		t.Fatalf("EnsureSafeDirectory calls = %d", gitWork.safeCalls)
-	}
-}
-
-// TestOrchestratorReportsCleanupFailureQuietly verifies the expected behavior.
-func TestOrchestratorReportsCleanupFailureQuietly(t *testing.T) {
-	t.Parallel()
-
-	workspace := workspaceWithRootTaskfile(t)
-	cfg := testConfig(workspace)
-	store := newLocalStore(t)
-
-	store.cleanupErr = errTestBoom
-
-	deps, orch := newTestOrchestratorParts(&testOrchInput{
-		t: t, store: store, gitOps: nil, gitWork: nil, pullReq: nil,
-	})
-
-	iox.Discard(deps)
-
-	runOrchestrator(t, orch, cfg)
-}
-
-// TestOrchestratorUnrelatedDirtyTreeFails verifies the expected behavior.
-func TestOrchestratorUnrelatedDirtyTreeFails(t *testing.T) {
-	t.Parallel()
-
-	workspace := workspaceWithRootTaskfile(t)
-	cfg := testConfig(workspace)
-	orchestrator := newTestOrchestrator(t, newMockGitOps(true, consts.Empty), nil)
-
-	initGitWorkspace(t, workspace)
-
-	assertRunFails(t, orchestrator, cfg)
-	assertPathNotExist(t, filepath.Join(workspace, testTargetFolder, "go", "Taskfile.yml"))
-}
-
-// TestOrchestratorSkipsPRWithoutClient verifies the expected behavior.
-func TestOrchestratorSkipsPRWithoutClient(t *testing.T) {
-	t.Parallel()
-
-	gitOps := newMockGitOps(false, testMainBranch)
-	runGitRepoOrchestrator(&gitRepoRunInput{t: t, gitOps: gitOps, pr: nil, cfg: nil})
-}
-
-// TestOrchestratorUpdatesExistingPR verifies the expected behavior.
-func TestOrchestratorUpdatesExistingPR(t *testing.T) {
-	t.Parallel()
-
-	pullReq := newMockPR(&prdomain.PullRequest{Number: consts.IndexSeven, URL: testPRURLSeven})
-	gitOps := newMockGitOps(false, testMainBranch)
-	result := runGitRepoOrchestrator(&gitRepoRunInput{t: t, gitOps: gitOps, pr: pullReq, cfg: nil})
-
-	assertPRUpdated(&assertPRUpdatedInput{
-		t: t, pullReq: pullReq, gitOps: gitOps, result: result,
-		wantBase: testMainBranch, wantNum: "7",
-	})
-}
-
 func runPreparedGitWorkspace(t *testing.T, gitWork *mockWorkspace) {
 	t.Helper()
 
@@ -461,18 +473,6 @@ func runPreparedGitWorkspace(t *testing.T, gitWork *mockWorkspace) {
 	iox.Discard(deps)
 
 	runOrchestrator(t, orch, cfg)
-}
-
-// TestOrchestratorRunRequiresConfiguration verifies the expected behavior.
-func TestOrchestratorRunRequiresConfiguration(t *testing.T) {
-	t.Parallel()
-
-	result, err := new(service.Orchestrator).Run(t.Context(), &config.Config{})
-	iox.Discard(result)
-
-	if err == nil {
-		t.Fatal("expected configuration error")
-	}
 }
 
 func assertPRCreated(args *assertPRCreatedInput) {

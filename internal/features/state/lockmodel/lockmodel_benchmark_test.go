@@ -24,6 +24,31 @@ const (
 	benchFilePrefix    = "/file"
 )
 
+// BenchmarkMarshalLock measures encoding a populated lock file to YAML.
+func BenchmarkMarshalLock(b *testing.B) {
+	lock := benchLockFile()
+
+	for b.Loop() {
+		iox.Discard(lockmodel.MarshalLock(lock))
+	}
+}
+
+// BenchmarkDecodeLockFileYAML measures decoding a populated lock file from YAML.
+func BenchmarkDecodeLockFileYAML(b *testing.B) {
+	data := lockmodel.MarshalLock(benchLockFile())
+
+	for b.Loop() {
+		var lock lockmodel.LockFile
+
+		err := lockmodel.DecodeLockFileYAML(data, &lock)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(lock)
+	}
+}
+
 func benchModuleName(idx int) string {
 	return benchModulePrefix + strconv.Itoa(idx)
 }
@@ -120,30 +145,5 @@ func benchLockFile() *lockmodel.LockFile {
 		GeneratedRootTasks: []string{"ci", "install", "lint", "version"},
 		ManagedFiles:       benchManagedFileList(),
 		Configuration:      benchLockConfiguration(),
-	}
-}
-
-// BenchmarkMarshalLock measures encoding a populated lock file to YAML.
-func BenchmarkMarshalLock(b *testing.B) {
-	lock := benchLockFile()
-
-	for b.Loop() {
-		iox.Discard(lockmodel.MarshalLock(lock))
-	}
-}
-
-// BenchmarkDecodeLockFileYAML measures decoding a populated lock file from YAML.
-func BenchmarkDecodeLockFileYAML(b *testing.B) {
-	data := lockmodel.MarshalLock(benchLockFile())
-
-	for b.Loop() {
-		var lock lockmodel.LockFile
-
-		err := lockmodel.DecodeLockFileYAML(data, &lock)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(lock)
 	}
 }

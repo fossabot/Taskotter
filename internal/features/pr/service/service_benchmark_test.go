@@ -31,6 +31,17 @@ const (
 	benchBranchMain   = "main"
 )
 
+// BenchmarkBuildPRBody measures rendering the sync pull request markdown body.
+func BenchmarkBuildPRBody(b *testing.B) {
+	cfg := benchBodyConfig()
+	plan := benchBodyPlan()
+	ref := benchBodyStoreRef()
+
+	for b.Loop() {
+		iox.Discard(prservice.BuildPRBody(cfg, plan, ref))
+	}
+}
+
 func benchModuleName(idx int) string {
 	return benchModulePrefix + strconv.Itoa(idx)
 }
@@ -125,16 +136,5 @@ func benchBodyStoreRef() *prdomain.StoreRef {
 		SourceRef:      benchSourceRef,
 		ResolvedCommit: benchCommit,
 		DefaultBranch:  benchBranchMain,
-	}
-}
-
-// BenchmarkBuildPRBody measures rendering the sync pull request markdown body.
-func BenchmarkBuildPRBody(b *testing.B) {
-	cfg := benchBodyConfig()
-	plan := benchBodyPlan()
-	ref := benchBodyStoreRef()
-
-	for b.Loop() {
-		iox.Discard(prservice.BuildPRBody(cfg, plan, ref))
 	}
 }

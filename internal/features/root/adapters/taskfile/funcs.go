@@ -92,6 +92,29 @@ func RewriteIncludes(
 	return out, nil
 }
 
+// UpdateRootTaskfile merges managed module includes into the root Taskfile.
+// Folded and literal module vars are copied from the module YAML bytes so
+// characters inside `>-` / `|` blocks are not rewritten by the encoder.
+func UpdateRootTaskfile(content []byte, input *rootUpdateInput) ([]byte, error) {
+	node, root, err := parseTaskfileRoot(
+		content,
+		"parse root Taskfile YAML: %v",
+		"empty root Taskfile YAML",
+	)
+	if err != nil {
+		return nil, fmt.Errorf(errParseTaskfileRoot, err)
+	}
+
+	out, err := marshalUpdatedRootTaskfile(&marshalRootParams{
+		node: node, root: root, content: content, input: input,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal updated root taskfile: %w", err)
+	}
+
+	return out, nil
+}
+
 func rewriteIncludesFromContent(params *rewriteIncludesParams) ([]byte, error) {
 	doc, root, err := parseTaskfileRoot(
 		params.content,
@@ -826,29 +849,6 @@ func includeDirForRoot(rootDir string) string {
 	}
 
 	return filepath.ToSlash(rel)
-}
-
-// UpdateRootTaskfile merges managed module includes into the root Taskfile.
-// Folded and literal module vars are copied from the module YAML bytes so
-// characters inside `>-` / `|` blocks are not rewritten by the encoder.
-func UpdateRootTaskfile(content []byte, input *rootUpdateInput) ([]byte, error) {
-	node, root, err := parseTaskfileRoot(
-		content,
-		"parse root Taskfile YAML: %v",
-		"empty root Taskfile YAML",
-	)
-	if err != nil {
-		return nil, fmt.Errorf(errParseTaskfileRoot, err)
-	}
-
-	out, err := marshalUpdatedRootTaskfile(&marshalRootParams{
-		node: node, root: root, content: content, input: input,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal updated root taskfile: %w", err)
-	}
-
-	return out, nil
 }
 
 func marshalUpdatedRootTaskfile(params *marshalRootParams) ([]byte, error) {

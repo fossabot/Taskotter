@@ -798,26 +798,6 @@ func (failingOps) UpdateRootTaskfile([]byte, *ports.RootUpdateInput) ([]byte, er
 	return nil, errStub
 }
 
-func minimalPlan() *domain.Plan {
-	plan := emptyPlan()
-
-	plan.Metadata = emptyMetadata(lockRelPath)
-
-	return &plan
-}
-
-func minimalSyncInput(workspace string) *domain.SyncInput {
-	input := emptySyncInput()
-	cfg := emptyConfig()
-
-	cfg.Workspace = workspace
-	cfg.TargetFolder = config.DefaultTargetFolder
-	cfg.RootTaskfile = rootTaskfileName
-	input.Config = &cfg
-
-	return &input
-}
-
 // TestApplyFileChangeUnchangedIsNoOp verifies the expected behavior.
 func TestApplyFileChangeUnchangedIsNoOp(t *testing.T) {
 	t.Parallel()
@@ -1136,43 +1116,6 @@ func TestWriteFullStubWriterUsedDocumentsFaults(t *testing.T) {
 	assertFails(t, writeFull(writer, []byte(byteX)))
 }
 
-func assertFilePayload(t *testing.T, path, want string) {
-	t.Helper()
-
-	//nolint:gosec // Test helper reads a path created by its caller.
-	data, err := os.ReadFile(path)
-	assertNoErr(t, err)
-
-	if string(data) != want {
-		t.Fatalf("payload = %q, want %q", data, want)
-	}
-}
-
-func createRealTemp(t *testing.T) *os.File {
-	t.Helper()
-
-	tmp, err := os.CreateTemp(t.TempDir(), stagingTempPattern)
-	assertNoErr(t, err)
-
-	t.Cleanup(func() { iox.Discard(os.Remove(tmp.Name())) })
-
-	return tmp
-}
-
-func discardTemp(file *os.File) {
-	if file == nil {
-		return
-	}
-
-	iox.Discard(file.Close())
-}
-
-func writeTempFile(t *testing.T, path string, data []byte) {
-	t.Helper()
-
-	assertNoErr(t, os.WriteFile(path, data, fileModeRegular))
-}
-
 // TestBuildPlanFromStateReportsFinalizeFailure verifies the expected behavior.
 func TestBuildPlanFromStateReportsFinalizeFailure(t *testing.T) {
 	t.Parallel()
@@ -1263,15 +1206,6 @@ func TestCollectModuleContentsReportsScanFailure(t *testing.T) {
 	assertCollectModuleContentsFails(t, sampleCollectArgs(t.TempDir()))
 	restoreTestSeams(t)
 	t.Parallel()
-}
-
-func assertCollectModuleContentsFails(t *testing.T, args *collectModuleArgs) {
-	t.Helper()
-
-	contents, docs, err := collectModuleContents(args)
-	iox.Discard(contents)
-	iox.Discard(docs)
-	assertFails(t, err)
 }
 
 // TestCollectModuleFileReportsStoreFailure verifies the expected behavior.
@@ -1512,577 +1446,6 @@ func TestWalkCollectModuleFileReportsCollectFailure(t *testing.T) {
 	assertFails(t, err)
 }
 
-func distinctDocCollectArgs(t *testing.T) *collectModuleArgs {
-	t.Helper()
-
-	workspace := t.TempDir()
-	source := filepath.Join(workspace, srcModuleName)
-	assertNoErr(t, mkdirAll(source, dirModePerm))
-
-	args := sampleCollectArgs(source)
-
-	args.syncInput.Config.IncludesDoc = true
-	args.syncInput.Snapshot = stubSnapshot{root: workspace}
-	args.mod = emptyModulePtr(srcModuleName, consts.Go)
-
-	return args
-}
-
-func failingRootSyncInput(t *testing.T) *domain.SyncInput {
-	t.Helper()
-
-	root := t.TempDir()
-	assertNoErr(t, mkdirAll(filepath.Join(root, taskfilesDirName), dirModePerm))
-
-	return &domain.SyncInput{
-		Config:      emptyConfigPtr(),
-		Snapshot:    stubSnapshot{root: root},
-		TaskfileOps: failingOps{},
-		Requested: map[string]moduleRecord{
-			consts.Go: {
-				SourceModule:      consts.Go,
-				DestinationModule: consts.Empty,
-				Path:              consts.Empty,
-			},
-		},
-		DestByTask:   map[string]string{consts.Go: consts.Go},
-		SourceToDest: map[string]string{consts.Go: consts.Go},
-	}
-}
-
-func goModuleSyncInput(workspace, storeRoot string) *domain.SyncInput {
-	input := minimalSyncInput(workspace)
-
-	input.Snapshot = dirSnapshot{root: storeRoot}
-	input.Requested = map[string]moduleRecord{
-		consts.Go: {
-			SourceModule: consts.Go, DestinationModule: consts.Go, Path: goDestPath,
-		},
-	}
-
-	return input
-}
-
-func managedGoLock() *syncLock {
-	lock := lockWithManaged(goTaskfileRel)
-
-	lock.Configuration.TargetFolder = config.DefaultTargetFolder
-
-	return lock
-}
-
-func prepFinalizeFailDirs(t *testing.T) (workspace, storeRoot string) {
-	t.Helper()
-
-	workspace = t.TempDir()
-	storeRoot = t.TempDir()
-
-	srcTask := filepath.Join(storeRoot, consts.Go, rootTaskfileName)
-	assertNoErr(t, mkdirAll(filepath.Dir(srcTask), dirModePerm))
-
-	writeTempFile(t, srcTask, []byte(emptyTaskYAML))
-	assertNoErr(
-		t,
-		mkdirAll(filepath.Join(workspace, filepath.FromSlash(goTaskfileRel)), dirModePerm),
-	)
-
-	return workspace, storeRoot
-}
-
-func sampleCollectArgs(sourceDir string) *collectModuleArgs {
-	return &collectModuleArgs{
-		syncInput:  syncInputWithConfig(),
-		mod:        emptyModulePtr(consts.Go, consts.Go),
-		sourceDir:  sourceDir,
-		destDirRel: config.DefaultTargetFolder + "/" + consts.Go,
-	}
-}
-
-func swapWalkThenFail(t *testing.T) {
-	t.Helper()
-
-	original := walkDir
-	calls := consts.IndexZero
-
-	swapSeam(t, &walkDir, func(root string, walker fs.WalkDirFunc) error {
-		calls++
-
-		if calls == consts.IndexOne {
-			return original(root, walker)
-		}
-
-		return errStub
-	})
-}
-
-func writeValidLock(t *testing.T, workspace, targetFolder string) {
-	t.Helper()
-
-	var lock syncLock
-
-	lock.Configuration.TargetFolder = targetFolder
-
-	path := filepath.Join(workspace, filepath.FromSlash(lockRelPath))
-	assertNoErr(t, mkdirAll(filepath.Dir(path), dirModePerm))
-
-	writeTempFile(t, path, lockmodel.MarshalLock(&lock))
-}
-
-func (dirSnapshot) DefaultBranch() string { return consts.Empty }
-
-func (snap dirSnapshot) ModuleDir(name string) string {
-	return filepath.Join(snap.root, name)
-}
-
-func (dirSnapshot) ResolvedCommit() string { return consts.Empty }
-
-func (dirSnapshot) SourceRef() string { return consts.Empty }
-
-func (snap dirSnapshot) WorkspaceRoot() string { return snap.root }
-
-func emptyLock() syncLock {
-	var lock syncLock
-
-	return lock
-}
-
-func emptyLockPtr() *syncLock {
-	lock := emptyLock()
-
-	return &lock
-}
-
-func emptyMetadata(lockFile string) state.Metadata {
-	var meta state.Metadata
-
-	meta.LockFile = lockFile
-
-	return meta
-}
-
-func emptyMetadataPtr(lockFile string) *state.Metadata {
-	meta := emptyMetadata(lockFile)
-
-	return &meta
-}
-
-func emptyModule(source, dest string) moduleRecord {
-	var mod moduleRecord
-
-	mod.SourceModule = source
-	mod.DestinationModule = dest
-
-	return mod
-}
-
-func emptyModulePtr(source, dest string) *moduleRecord {
-	mod := emptyModule(source, dest)
-
-	return &mod
-}
-
-func managedAt(path, dest, sha string) managedFile {
-	var file managedFile
-
-	file.Path = path
-	file.DestinationModule = dest
-	file.SHA256 = sha
-
-	return file
-}
-
-func managedAtPtr(path, dest, sha string) *managedFile {
-	file := managedAt(path, dest, sha)
-
-	return &file
-}
-
-func emptyConfig() config.Config {
-	var cfg config.Config
-
-	return cfg
-}
-
-func emptyConfigPtr() *config.Config {
-	cfg := emptyConfig()
-
-	return &cfg
-}
-
-func emptySyncInput() domain.SyncInput {
-	var input domain.SyncInput
-
-	return input
-}
-
-func emptySyncInputPtr() *domain.SyncInput {
-	input := emptySyncInput()
-
-	return &input
-}
-
-func emptyPlan() domain.Plan {
-	var plan domain.Plan
-
-	return plan
-}
-
-func planWithLockMeta(lockFile string) *domain.Plan {
-	plan := emptyPlan()
-
-	plan.Metadata = emptyMetadata(lockFile)
-
-	return &plan
-}
-
-func syncInputWithConfig() *domain.SyncInput {
-	syncIn := emptySyncInput()
-	cfg := emptyConfig()
-
-	syncIn.Config = &cfg
-
-	return &syncIn
-}
-
-func lockWithManaged(path string) *syncLock {
-	lock := emptyLock()
-
-	lock.ManagedFiles = []managedFile{managedAt(path, consts.Go, consts.Empty)}
-
-	return &lock
-}
-
-func newStagingSession(copyFile func(string, *domain.FileEntry) error) stagingSession {
-	var session stagingSession
-
-	session.copyFile = copyFile
-
-	return session
-}
-
-func zeroDiffLists() *diffLists {
-	var lists diffLists
-
-	return &lists
-}
-
-func newTempEntry(t *testing.T) tempEntry {
-	t.Helper()
-
-	root := t.TempDir()
-	writeTempFile(t, filepath.Join(root, fileNameTxt), []byte(byteX))
-
-	entries, err := os.ReadDir(root)
-	assertNoErr(t, err)
-
-	return tempEntry{entry: entries[consts.IndexZero], root: root}
-}
-
-func missingFileEntryArgs(t *testing.T) *fileEntryArgs {
-	t.Helper()
-
-	temp := newTempEntry(t)
-
-	var args fileEntryArgs
-
-	args.entry = temp.entry
-	args.sourceDir = temp.root
-	args.rel = missingTxt
-	args.absPath = missingTxt
-
-	return &args
-}
-
-func goModulePlanArgs(workspace string) *modulePlanArgs {
-	var args modulePlanArgs
-
-	var syncIn domain.SyncInput
-
-	syncIn.Config = emptyConfigPtr()
-	syncIn.Snapshot = dirSnapshot{root: workspace}
-
-	args.syncInput = &syncIn
-	args.mod = emptyModulePtr(consts.Go, consts.Go)
-	args.moduleContents = mcMap{}
-
-	return &args
-}
-
-func goTaskMetadataInput(want *storeTaskMetadata) *groupModulesInput {
-	var input groupModulesInput
-
-	input.requestedRecords = map[string]moduleRecord{
-		consts.Go: emptyModule(consts.Go, consts.Empty),
-	}
-	input.metadata = storeTaskMetaMap{consts.Go: *want}
-
-	return &input
-}
-
-func sortedManagedFixture() []managedFile {
-	planned := []managedFile{
-		managedAt(pathB, consts.Empty, consts.Empty),
-		managedAt(pathA, consts.Empty, consts.Empty),
-		managedAt(pathA, consts.Empty, consts.Empty),
-	}
-
-	planned[consts.IndexZero].SourceModule = "mod-z"
-	planned[consts.IndexOne].SourceModule = "mod-y"
-	planned[consts.IndexTwo].SourceModule = modXName
-
-	return planned
-}
-
-func prepFinalizeDiffWorkspace(t *testing.T) string {
-	t.Helper()
-
-	workspace := t.TempDir()
-	assertNoErr(
-		t,
-		mkdirAll(filepath.Join(workspace, filepath.FromSlash(goTaskfileRel)), dirModePerm),
-	)
-
-	return workspace
-}
-
-func finalizeDiffFailInput(workspace string) *finalizeBuiltPlanInput {
-	plan := emptyPlan()
-
-	plan.ManagedFiles = []managedFile{managedAt(goTaskfileRel, consts.Empty, byteX)}
-	plan.Metadata = emptyMetadata(lockRelPath)
-
-	var artifacts planArtifacts
-
-	return &finalizeBuiltPlanInput{
-		syncInput: minimalSyncInput(workspace),
-		plan:      &plan,
-		meta:      emptyMetadataPtr(lockRelPath),
-		artifacts: &artifacts,
-	}
-}
-
-func assertCandidateRelFails(
-	t *testing.T,
-	call func(*metadataCandidateArgs) (string, metadataScanResult, error),
-) {
-	t.Helper()
-
-	swapRelPath(t, failingRelPath)
-
-	rel, scan, err := call(&metadataCandidateArgs{
-		workspace:           wsRoot,
-		currentMetadataPath: metaRelPath,
-		abs:                 wsFileX,
-		entry:               fakeDirEntry{name: fileNameTxt, dir: false},
-	})
-
-	iox.Discard(rel)
-	iox.Discard(scan)
-	assertFails(t, err)
-}
-
-func assertFails(t *testing.T, err error) {
-	t.Helper()
-
-	if err == nil {
-		t.Fatal(wantErrText)
-	}
-}
-
-func assertNoErr(t *testing.T, err error) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatalf(unexpectFmt, err)
-	}
-}
-
-func failingChmod(*os.File, os.FileMode) error { return errStub }
-
-func failingClose(*os.File) error { return errStub }
-
-func failingCreateTemp(string, string) (*os.File, error) {
-	return nil, errStub
-}
-
-func failingMarshalYAML(any) ([]byte, error) { return nil, errStub }
-
-func failingMkdirAll(string, os.FileMode) error { return errStub }
-
-func failingMkdirTemp(string, string) (string, error) {
-	return consts.Empty, errStub
-}
-
-func failingOpenRelative(string, string) (*os.File, error) {
-	return nil, errStub
-}
-
-func failingReadAll(io.Reader) ([]byte, error) { return nil, errStub }
-
-func failingRelPath(string, string) (string, error) {
-	return consts.Empty, errStub
-}
-
-func failingRemove(string) error { return errStub }
-
-func failingRename(string, string) error { return errStub }
-
-//nolint:ireturn // os.FileInfo is required by the filesystem seam signature.
-func failingStat(string) (os.FileInfo, error) { return nil, errStub }
-
-func failingWalk(string, fs.WalkDirFunc) error { return errStub }
-
-func failingWriteFull(io.Writer, []byte) error { return errStub }
-
-func prepGoSubDir(t *testing.T) string {
-	t.Helper()
-
-	workspace := t.TempDir()
-	nested := filepath.Join(workspace, taskfilesDirName, consts.Go, subDirName)
-	assertNoErr(t, mkdirAll(nested, dirModePerm))
-
-	return workspace
-}
-
-func succeedThenFail() func(string) error {
-	calls := consts.IndexZero
-
-	return func(string) error {
-		calls++
-
-		if calls == consts.IndexOne {
-			return nil
-		}
-
-		return errStub
-	}
-}
-
-func swapSeam[T any](t *testing.T, target *T, stub T) {
-	t.Helper()
-
-	if len(testSeamRestores[t]) == consts.IndexZero {
-		testSeamMu.Lock()
-		t.Cleanup(func() { restoreTestSeams(t) })
-	}
-
-	original := *target
-	restore := func() {
-		*target = original
-	}
-
-	*target = stub
-
-	testSeamRestores[t] = append(testSeamRestores[t], restore)
-}
-
-func restoreTestSeams(t *testing.T) {
-	t.Helper()
-
-	restores := testSeamRestores[t]
-
-	if len(restores) == consts.IndexZero {
-		return
-	}
-
-	for idx := range slices.Backward(restores) {
-		restores[idx]()
-	}
-
-	delete(testSeamRestores, t)
-	testSeamMu.Unlock()
-}
-
-func swapChmodFile(t *testing.T, stub func(*os.File, os.FileMode) error) {
-	t.Helper()
-
-	swapSeam(t, &chmodFile, stub)
-}
-
-func swapCloseFile(t *testing.T, stub func(*os.File) error) {
-	t.Helper()
-
-	swapSeam(t, &closeFile, stub)
-}
-
-func swapCreateTemp(t *testing.T, stub func(string, string) (*os.File, error)) {
-	t.Helper()
-
-	swapSeam(t, &createTemp, stub)
-}
-
-func swapMarshalYAML(t *testing.T, stub func(any) ([]byte, error)) {
-	t.Helper()
-
-	swapSeam(t, &marshalYAML, stub)
-}
-
-func swapMkdirAll(t *testing.T, stub func(string, os.FileMode) error) {
-	t.Helper()
-
-	swapSeam(t, &mkdirAll, stub)
-}
-
-func swapMkdirTemp(t *testing.T, stub func(string, string) (string, error)) {
-	t.Helper()
-
-	swapSeam(t, &mkdirTemp, stub)
-}
-
-func swapOpenRelative(t *testing.T, stub func(string, string) (*os.File, error)) {
-	t.Helper()
-
-	swapSeam(t, &openRelativeFile, stub)
-}
-
-func swapReadAll(t *testing.T, stub func(io.Reader) ([]byte, error)) {
-	t.Helper()
-
-	swapSeam(t, &readAll, stub)
-}
-
-func swapRelPath(t *testing.T, stub func(string, string) (string, error)) {
-	t.Helper()
-
-	swapSeam(t, &relPath, stub)
-}
-
-func swapRemoveAll(t *testing.T, stub func(string) error) {
-	t.Helper()
-
-	swapSeam(t, &removeAll, stub)
-}
-
-func swapRemovePath(t *testing.T, stub func(string) error) {
-	t.Helper()
-
-	swapSeam(t, &removePath, stub)
-}
-
-func swapRenamePath(t *testing.T, stub func(string, string) error) {
-	t.Helper()
-
-	swapSeam(t, &renamePath, stub)
-}
-
-func swapStatPath(t *testing.T, stub func(string) (os.FileInfo, error)) {
-	t.Helper()
-
-	swapSeam(t, &statPath, stub)
-}
-
-func swapWalkDir(t *testing.T, stub func(string, fs.WalkDirFunc) error) {
-	t.Helper()
-
-	swapSeam(t, &walkDir, stub)
-}
-
-func swapWriteFull(t *testing.T, stub func(io.Writer, []byte) error) {
-	t.Helper()
-
-	swapSeam(t, &writeFull, stub)
-}
-
 // TestCollectMetadataCandidatesReportsWalkFailure verifies the expected behavior.
 func TestCollectMetadataCandidatesReportsWalkFailure(t *testing.T) {
 	swapWalkDir(t, failingWalk)
@@ -2218,15 +1581,6 @@ func TestTryLegacyMetadataSkipsWhenAlreadyLegacy(t *testing.T) {
 	}
 }
 
-//nolint:ireturn // os.FileInfo is required by fs.DirEntry.
-func (fakeDirEntry) Info() (os.FileInfo, error) { return nil, errStub }
-
-func (entry fakeDirEntry) IsDir() bool { return entry.dir }
-
-func (entry fakeDirEntry) Name() string { return entry.name }
-
-func (fakeDirEntry) Type() fs.FileMode { return consts.IndexZero }
-
 // TestBuildFileEntryReportsInfoFailure verifies the expected behavior.
 func TestBuildFileEntryReportsInfoFailure(t *testing.T) {
 	t.Parallel()
@@ -2299,6 +1653,18 @@ func TestIsDestinationManagedNilLock(t *testing.T) {
 		t.Fatal("nil lock should be unmanaged")
 	}
 }
+
+func (dirSnapshot) DefaultBranch() string { return consts.Empty }
+
+func (snap dirSnapshot) ModuleDir(name string) string {
+	return filepath.Join(snap.root, name)
+}
+
+func (dirSnapshot) ResolvedCommit() string { return consts.Empty }
+
+func (dirSnapshot) SourceRef() string { return consts.Empty }
+
+func (snap dirSnapshot) WorkspaceRoot() string { return snap.root }
 
 // TestLogicalRootReadyMissingReturnsFalse verifies the expected behavior.
 func TestLogicalRootReadyMissingReturnsFalse(t *testing.T) {
@@ -2820,6 +2186,640 @@ func TestUnmarshalYAMLReportsFailure(t *testing.T) {
 	var meta storeTaskMetadata
 
 	assertFails(t, yaml.Unmarshal([]byte("plain\n"), &meta))
+}
+
+func minimalPlan() *domain.Plan {
+	plan := emptyPlan()
+
+	plan.Metadata = emptyMetadata(lockRelPath)
+
+	return &plan
+}
+
+func minimalSyncInput(workspace string) *domain.SyncInput {
+	input := emptySyncInput()
+	cfg := emptyConfig()
+
+	cfg.Workspace = workspace
+	cfg.TargetFolder = config.DefaultTargetFolder
+	cfg.RootTaskfile = rootTaskfileName
+	input.Config = &cfg
+
+	return &input
+}
+
+func assertFilePayload(t *testing.T, path, want string) {
+	t.Helper()
+
+	//nolint:gosec // Test helper reads a path created by its caller.
+	data, err := os.ReadFile(path)
+	assertNoErr(t, err)
+
+	if string(data) != want {
+		t.Fatalf("payload = %q, want %q", data, want)
+	}
+}
+
+func createRealTemp(t *testing.T) *os.File {
+	t.Helper()
+
+	tmp, err := os.CreateTemp(t.TempDir(), stagingTempPattern)
+	assertNoErr(t, err)
+
+	t.Cleanup(func() { iox.Discard(os.Remove(tmp.Name())) })
+
+	return tmp
+}
+
+func discardTemp(file *os.File) {
+	if file == nil {
+		return
+	}
+
+	iox.Discard(file.Close())
+}
+
+func writeTempFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+
+	assertNoErr(t, os.WriteFile(path, data, fileModeRegular))
+}
+
+func assertCollectModuleContentsFails(t *testing.T, args *collectModuleArgs) {
+	t.Helper()
+
+	contents, docs, err := collectModuleContents(args)
+	iox.Discard(contents)
+	iox.Discard(docs)
+	assertFails(t, err)
+}
+
+func distinctDocCollectArgs(t *testing.T) *collectModuleArgs {
+	t.Helper()
+
+	workspace := t.TempDir()
+	source := filepath.Join(workspace, srcModuleName)
+	assertNoErr(t, mkdirAll(source, dirModePerm))
+
+	args := sampleCollectArgs(source)
+
+	args.syncInput.Config.IncludesDoc = true
+	args.syncInput.Snapshot = stubSnapshot{root: workspace}
+	args.mod = emptyModulePtr(srcModuleName, consts.Go)
+
+	return args
+}
+
+func failingRootSyncInput(t *testing.T) *domain.SyncInput {
+	t.Helper()
+
+	root := t.TempDir()
+	assertNoErr(t, mkdirAll(filepath.Join(root, taskfilesDirName), dirModePerm))
+
+	return &domain.SyncInput{
+		Config:      emptyConfigPtr(),
+		Snapshot:    stubSnapshot{root: root},
+		TaskfileOps: failingOps{},
+		Requested: map[string]moduleRecord{
+			consts.Go: {
+				SourceModule:      consts.Go,
+				DestinationModule: consts.Empty,
+				Path:              consts.Empty,
+			},
+		},
+		DestByTask:   map[string]string{consts.Go: consts.Go},
+		SourceToDest: map[string]string{consts.Go: consts.Go},
+	}
+}
+
+func goModuleSyncInput(workspace, storeRoot string) *domain.SyncInput {
+	input := minimalSyncInput(workspace)
+
+	input.Snapshot = dirSnapshot{root: storeRoot}
+	input.Requested = map[string]moduleRecord{
+		consts.Go: {
+			SourceModule: consts.Go, DestinationModule: consts.Go, Path: goDestPath,
+		},
+	}
+
+	return input
+}
+
+func managedGoLock() *syncLock {
+	lock := lockWithManaged(goTaskfileRel)
+
+	lock.Configuration.TargetFolder = config.DefaultTargetFolder
+
+	return lock
+}
+
+func prepFinalizeFailDirs(t *testing.T) (workspace, storeRoot string) {
+	t.Helper()
+
+	workspace = t.TempDir()
+	storeRoot = t.TempDir()
+
+	srcTask := filepath.Join(storeRoot, consts.Go, rootTaskfileName)
+	assertNoErr(t, mkdirAll(filepath.Dir(srcTask), dirModePerm))
+
+	writeTempFile(t, srcTask, []byte(emptyTaskYAML))
+	assertNoErr(
+		t,
+		mkdirAll(filepath.Join(workspace, filepath.FromSlash(goTaskfileRel)), dirModePerm),
+	)
+
+	return workspace, storeRoot
+}
+
+func sampleCollectArgs(sourceDir string) *collectModuleArgs {
+	return &collectModuleArgs{
+		syncInput:  syncInputWithConfig(),
+		mod:        emptyModulePtr(consts.Go, consts.Go),
+		sourceDir:  sourceDir,
+		destDirRel: config.DefaultTargetFolder + "/" + consts.Go,
+	}
+}
+
+func swapWalkThenFail(t *testing.T) {
+	t.Helper()
+
+	original := walkDir
+	calls := consts.IndexZero
+
+	swapSeam(t, &walkDir, func(root string, walker fs.WalkDirFunc) error {
+		calls++
+
+		if calls == consts.IndexOne {
+			return original(root, walker)
+		}
+
+		return errStub
+	})
+}
+
+func writeValidLock(t *testing.T, workspace, targetFolder string) {
+	t.Helper()
+
+	var lock syncLock
+
+	lock.Configuration.TargetFolder = targetFolder
+
+	path := filepath.Join(workspace, filepath.FromSlash(lockRelPath))
+	assertNoErr(t, mkdirAll(filepath.Dir(path), dirModePerm))
+
+	writeTempFile(t, path, lockmodel.MarshalLock(&lock))
+}
+
+func emptyLock() syncLock {
+	var lock syncLock
+
+	return lock
+}
+
+func emptyLockPtr() *syncLock {
+	lock := emptyLock()
+
+	return &lock
+}
+
+func emptyMetadata(lockFile string) state.Metadata {
+	var meta state.Metadata
+
+	meta.LockFile = lockFile
+
+	return meta
+}
+
+func emptyMetadataPtr(lockFile string) *state.Metadata {
+	meta := emptyMetadata(lockFile)
+
+	return &meta
+}
+
+func emptyModule(source, dest string) moduleRecord {
+	var mod moduleRecord
+
+	mod.SourceModule = source
+	mod.DestinationModule = dest
+
+	return mod
+}
+
+func emptyModulePtr(source, dest string) *moduleRecord {
+	mod := emptyModule(source, dest)
+
+	return &mod
+}
+
+func managedAt(path, dest, sha string) managedFile {
+	var file managedFile
+
+	file.Path = path
+	file.DestinationModule = dest
+	file.SHA256 = sha
+
+	return file
+}
+
+func managedAtPtr(path, dest, sha string) *managedFile {
+	file := managedAt(path, dest, sha)
+
+	return &file
+}
+
+func emptyConfig() config.Config {
+	var cfg config.Config
+
+	return cfg
+}
+
+func emptyConfigPtr() *config.Config {
+	cfg := emptyConfig()
+
+	return &cfg
+}
+
+func emptySyncInput() domain.SyncInput {
+	var input domain.SyncInput
+
+	return input
+}
+
+func emptySyncInputPtr() *domain.SyncInput {
+	input := emptySyncInput()
+
+	return &input
+}
+
+func emptyPlan() domain.Plan {
+	var plan domain.Plan
+
+	return plan
+}
+
+func planWithLockMeta(lockFile string) *domain.Plan {
+	plan := emptyPlan()
+
+	plan.Metadata = emptyMetadata(lockFile)
+
+	return &plan
+}
+
+func syncInputWithConfig() *domain.SyncInput {
+	syncIn := emptySyncInput()
+	cfg := emptyConfig()
+
+	syncIn.Config = &cfg
+
+	return &syncIn
+}
+
+func lockWithManaged(path string) *syncLock {
+	lock := emptyLock()
+
+	lock.ManagedFiles = []managedFile{managedAt(path, consts.Go, consts.Empty)}
+
+	return &lock
+}
+
+func newStagingSession(copyFile func(string, *domain.FileEntry) error) stagingSession {
+	var session stagingSession
+
+	session.copyFile = copyFile
+
+	return session
+}
+
+func zeroDiffLists() *diffLists {
+	var lists diffLists
+
+	return &lists
+}
+
+func newTempEntry(t *testing.T) tempEntry {
+	t.Helper()
+
+	root := t.TempDir()
+	writeTempFile(t, filepath.Join(root, fileNameTxt), []byte(byteX))
+
+	entries, err := os.ReadDir(root)
+	assertNoErr(t, err)
+
+	return tempEntry{entry: entries[consts.IndexZero], root: root}
+}
+
+func missingFileEntryArgs(t *testing.T) *fileEntryArgs {
+	t.Helper()
+
+	temp := newTempEntry(t)
+
+	var args fileEntryArgs
+
+	args.entry = temp.entry
+	args.sourceDir = temp.root
+	args.rel = missingTxt
+	args.absPath = missingTxt
+
+	return &args
+}
+
+//nolint:ireturn // os.FileInfo is required by fs.DirEntry.
+func (fakeDirEntry) Info() (os.FileInfo, error) { return nil, errStub }
+
+func (entry fakeDirEntry) IsDir() bool { return entry.dir }
+
+func (entry fakeDirEntry) Name() string { return entry.name }
+
+func (fakeDirEntry) Type() fs.FileMode { return consts.IndexZero }
+
+func goModulePlanArgs(workspace string) *modulePlanArgs {
+	var args modulePlanArgs
+
+	var syncIn domain.SyncInput
+
+	syncIn.Config = emptyConfigPtr()
+	syncIn.Snapshot = dirSnapshot{root: workspace}
+
+	args.syncInput = &syncIn
+	args.mod = emptyModulePtr(consts.Go, consts.Go)
+	args.moduleContents = mcMap{}
+
+	return &args
+}
+
+func goTaskMetadataInput(want *storeTaskMetadata) *groupModulesInput {
+	var input groupModulesInput
+
+	input.requestedRecords = map[string]moduleRecord{
+		consts.Go: emptyModule(consts.Go, consts.Empty),
+	}
+	input.metadata = storeTaskMetaMap{consts.Go: *want}
+
+	return &input
+}
+
+func sortedManagedFixture() []managedFile {
+	planned := []managedFile{
+		managedAt(pathB, consts.Empty, consts.Empty),
+		managedAt(pathA, consts.Empty, consts.Empty),
+		managedAt(pathA, consts.Empty, consts.Empty),
+	}
+
+	planned[consts.IndexZero].SourceModule = "mod-z"
+	planned[consts.IndexOne].SourceModule = "mod-y"
+	planned[consts.IndexTwo].SourceModule = modXName
+
+	return planned
+}
+
+func prepFinalizeDiffWorkspace(t *testing.T) string {
+	t.Helper()
+
+	workspace := t.TempDir()
+	assertNoErr(
+		t,
+		mkdirAll(filepath.Join(workspace, filepath.FromSlash(goTaskfileRel)), dirModePerm),
+	)
+
+	return workspace
+}
+
+func finalizeDiffFailInput(workspace string) *finalizeBuiltPlanInput {
+	plan := emptyPlan()
+
+	plan.ManagedFiles = []managedFile{managedAt(goTaskfileRel, consts.Empty, byteX)}
+	plan.Metadata = emptyMetadata(lockRelPath)
+
+	var artifacts planArtifacts
+
+	return &finalizeBuiltPlanInput{
+		syncInput: minimalSyncInput(workspace),
+		plan:      &plan,
+		meta:      emptyMetadataPtr(lockRelPath),
+		artifacts: &artifacts,
+	}
+}
+
+func assertCandidateRelFails(
+	t *testing.T,
+	call func(*metadataCandidateArgs) (string, metadataScanResult, error),
+) {
+	t.Helper()
+
+	swapRelPath(t, failingRelPath)
+
+	rel, scan, err := call(&metadataCandidateArgs{
+		workspace:           wsRoot,
+		currentMetadataPath: metaRelPath,
+		abs:                 wsFileX,
+		entry:               fakeDirEntry{name: fileNameTxt, dir: false},
+	})
+
+	iox.Discard(rel)
+	iox.Discard(scan)
+	assertFails(t, err)
+}
+
+func assertFails(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal(wantErrText)
+	}
+}
+
+func assertNoErr(t *testing.T, err error) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf(unexpectFmt, err)
+	}
+}
+
+func failingChmod(*os.File, os.FileMode) error { return errStub }
+
+func failingClose(*os.File) error { return errStub }
+
+func failingCreateTemp(string, string) (*os.File, error) {
+	return nil, errStub
+}
+
+func failingMarshalYAML(any) ([]byte, error) { return nil, errStub }
+
+func failingMkdirAll(string, os.FileMode) error { return errStub }
+
+func failingMkdirTemp(string, string) (string, error) {
+	return consts.Empty, errStub
+}
+
+func failingOpenRelative(string, string) (*os.File, error) {
+	return nil, errStub
+}
+
+func failingReadAll(io.Reader) ([]byte, error) { return nil, errStub }
+
+func failingRelPath(string, string) (string, error) {
+	return consts.Empty, errStub
+}
+
+func failingRemove(string) error { return errStub }
+
+func failingRename(string, string) error { return errStub }
+
+//nolint:ireturn // os.FileInfo is required by the filesystem seam signature.
+func failingStat(string) (os.FileInfo, error) { return nil, errStub }
+
+func failingWalk(string, fs.WalkDirFunc) error { return errStub }
+
+func failingWriteFull(io.Writer, []byte) error { return errStub }
+
+func prepGoSubDir(t *testing.T) string {
+	t.Helper()
+
+	workspace := t.TempDir()
+	nested := filepath.Join(workspace, taskfilesDirName, consts.Go, subDirName)
+	assertNoErr(t, mkdirAll(nested, dirModePerm))
+
+	return workspace
+}
+
+func succeedThenFail() func(string) error {
+	calls := consts.IndexZero
+
+	return func(string) error {
+		calls++
+
+		if calls == consts.IndexOne {
+			return nil
+		}
+
+		return errStub
+	}
+}
+
+func swapSeam[T any](t *testing.T, target *T, stub T) {
+	t.Helper()
+
+	if len(testSeamRestores[t]) == consts.IndexZero {
+		testSeamMu.Lock()
+		t.Cleanup(func() { restoreTestSeams(t) })
+	}
+
+	original := *target
+	restore := func() {
+		*target = original
+	}
+
+	*target = stub
+
+	testSeamRestores[t] = append(testSeamRestores[t], restore)
+}
+
+func restoreTestSeams(t *testing.T) {
+	t.Helper()
+
+	restores := testSeamRestores[t]
+
+	if len(restores) == consts.IndexZero {
+		return
+	}
+
+	for idx := range slices.Backward(restores) {
+		restores[idx]()
+	}
+
+	delete(testSeamRestores, t)
+	testSeamMu.Unlock()
+}
+
+func swapChmodFile(t *testing.T, stub func(*os.File, os.FileMode) error) {
+	t.Helper()
+
+	swapSeam(t, &chmodFile, stub)
+}
+
+func swapCloseFile(t *testing.T, stub func(*os.File) error) {
+	t.Helper()
+
+	swapSeam(t, &closeFile, stub)
+}
+
+func swapCreateTemp(t *testing.T, stub func(string, string) (*os.File, error)) {
+	t.Helper()
+
+	swapSeam(t, &createTemp, stub)
+}
+
+func swapMarshalYAML(t *testing.T, stub func(any) ([]byte, error)) {
+	t.Helper()
+
+	swapSeam(t, &marshalYAML, stub)
+}
+
+func swapMkdirAll(t *testing.T, stub func(string, os.FileMode) error) {
+	t.Helper()
+
+	swapSeam(t, &mkdirAll, stub)
+}
+
+func swapMkdirTemp(t *testing.T, stub func(string, string) (string, error)) {
+	t.Helper()
+
+	swapSeam(t, &mkdirTemp, stub)
+}
+
+func swapOpenRelative(t *testing.T, stub func(string, string) (*os.File, error)) {
+	t.Helper()
+
+	swapSeam(t, &openRelativeFile, stub)
+}
+
+func swapReadAll(t *testing.T, stub func(io.Reader) ([]byte, error)) {
+	t.Helper()
+
+	swapSeam(t, &readAll, stub)
+}
+
+func swapRelPath(t *testing.T, stub func(string, string) (string, error)) {
+	t.Helper()
+
+	swapSeam(t, &relPath, stub)
+}
+
+func swapRemoveAll(t *testing.T, stub func(string) error) {
+	t.Helper()
+
+	swapSeam(t, &removeAll, stub)
+}
+
+func swapRemovePath(t *testing.T, stub func(string) error) {
+	t.Helper()
+
+	swapSeam(t, &removePath, stub)
+}
+
+func swapRenamePath(t *testing.T, stub func(string, string) error) {
+	t.Helper()
+
+	swapSeam(t, &renamePath, stub)
+}
+
+func swapStatPath(t *testing.T, stub func(string) (os.FileInfo, error)) {
+	t.Helper()
+
+	swapSeam(t, &statPath, stub)
+}
+
+func swapWalkDir(t *testing.T, stub func(string, fs.WalkDirFunc) error) {
+	t.Helper()
+
+	swapSeam(t, &walkDir, stub)
+}
+
+func swapWriteFull(t *testing.T, stub func(io.Writer, []byte) error) {
+	t.Helper()
+
+	swapSeam(t, &writeFull, stub)
 }
 
 func (stubSnapshot) DefaultBranch() string { return consts.Empty }

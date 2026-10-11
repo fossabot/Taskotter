@@ -38,6 +38,37 @@ const (
 		"tasks:\n  lint:\n    cmds:\n      - echo lint\n"
 )
 
+// BenchmarkLoadCatalogAndDeps measures walking a store tree and parsing its dependency graph.
+//
+//nolint:unqueryvet // The benchmark intentionally measures a complete independent catalog load per iteration.
+func BenchmarkLoadCatalogAndDeps(b *testing.B) {
+	root := benchStoreRoot(b)
+
+	for b.Loop() {
+		catalog, deps, err := storesvc.LoadCatalogAndDeps(root)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard2(catalog, deps)
+	}
+}
+
+// BenchmarkLocalSnapshot measures performance.
+func BenchmarkLocalSnapshot(b *testing.B) {
+	ref := fixtureRefInfo()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := storesvc.LocalSnapshot(fixtureStoreRoot, ref)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func benchModuleName(idx int) string {
 	return benchModulePrefix + strconv.Itoa(idx)
 }
@@ -108,35 +139,4 @@ func benchStoreRoot(b *testing.B) string {
 	benchWriteStoreFile(b, deps)
 
 	return root
-}
-
-// BenchmarkLoadCatalogAndDeps measures walking a store tree and parsing its dependency graph.
-//
-//nolint:unqueryvet // The benchmark intentionally measures a complete independent catalog load per iteration.
-func BenchmarkLoadCatalogAndDeps(b *testing.B) {
-	root := benchStoreRoot(b)
-
-	for b.Loop() {
-		catalog, deps, err := storesvc.LoadCatalogAndDeps(root)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard2(catalog, deps)
-	}
-}
-
-// BenchmarkLocalSnapshot measures performance.
-func BenchmarkLocalSnapshot(b *testing.B) {
-	ref := fixtureRefInfo()
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := storesvc.LocalSnapshot(fixtureStoreRoot, ref)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
 }

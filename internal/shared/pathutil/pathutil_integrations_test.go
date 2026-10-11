@@ -166,49 +166,6 @@ func TestOpenRelativeFileMissingFile(t *testing.T) {
 	}
 }
 
-func blockDir(t *testing.T, path string) {
-	t.Helper()
-
-	mkdirOrFail(t, path, consts.FilePerm755)
-	chmodOrFail(t, path, consts.IndexZero)
-	t.Cleanup(func() { iox.Discard(os.Chmod(path, consts.FilePerm755)) })
-}
-
-func chmodOrFail(t *testing.T, path string, mode os.FileMode) {
-	t.Helper()
-
-	err := os.Chmod(path, mode)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func linkTargetSymlink(t *testing.T, workspace string) {
-	t.Helper()
-
-	target := filepath.Join(workspace, "real")
-	mkdirOrFail(t, filepath.Join(target, testFieldTasks), consts.FilePerm755)
-	symlinkOrSkip(t, target, filepath.Join(workspace, linkName))
-}
-
-func mkdirOrFail(t *testing.T, path string, mode os.FileMode) {
-	t.Helper()
-
-	err := os.MkdirAll(path, mode)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func symlinkOrSkip(t *testing.T, target, link string) {
-	t.Helper()
-
-	err := os.Symlink(target, link)
-	if err != nil {
-		t.Skip("symlink not permitted")
-	}
-}
-
 // TestIsTestPath verifies test file paths are identified regardless of directory nesting.
 func TestIsTestPath(t *testing.T) {
 	t.Parallel()
@@ -216,17 +173,6 @@ func TestIsTestPath(t *testing.T) {
 		t,
 		&boolAssert{name: "IsTestPath", cases: isTestPathCases(), fn: pathutil.IsTestPath},
 	)
-}
-
-func isTestPathCases() []boolCase {
-	return []boolCase{
-		{"go_test.go", true},
-		{"eslint_test.ts", true},
-		{"nested/pkg/foo_test.go", true},
-		{pathTaskfileYML, false},
-		{consts.ReadmeMD, false},
-		{"latest.txt", false},
-	}
 }
 
 // TestIsModuleMetadataPath verifies only the top-level metadata.yml path is recognized.
@@ -257,49 +203,6 @@ func TestIsModuleMetadataPath(t *testing.T) {
 func TestHasFolderPrefix(t *testing.T) {
 	t.Parallel()
 	assertFolderPrefixCases(t, hasFolderPrefixCases())
-}
-
-func hasFolderPrefixCases() []folderPrefixCase {
-	return []folderPrefixCase{
-		{testTaskfilesGo, folderTaskfiles, true},
-		{pathGoTaskfile, folderTaskfiles, true},
-		{folderTask, folderTask, true},
-		{"taskfiles-extra/foo", folderTask, false},
-		{"task/extra", folderTaskfiles, false},
-		{consts.Empty, folderTaskfiles, false},
-	}
-}
-
-func assertFolderPrefixCases(t *testing.T, cases []folderPrefixCase) {
-	t.Helper()
-
-	for i := range cases {
-		testCase := &cases[i]
-		got := pathutil.HasFolderPrefix(testCase.path, testCase.folder)
-
-		if got != testCase.want {
-			t.Fatalf(
-				"HasFolderPrefix(%q, %q) = %t, want %t",
-				testCase.path,
-				testCase.folder,
-				got,
-				testCase.want,
-			)
-		}
-	}
-}
-
-func assertBoolCases(t *testing.T, spec *boolAssert) {
-	t.Helper()
-
-	for i := range spec.cases {
-		testCase := &spec.cases[i]
-		got := spec.fn(testCase.path)
-
-		if got != testCase.want {
-			t.Fatalf("%s(%q) = %t, want %t", spec.name, testCase.path, got, testCase.want)
-		}
-	}
 }
 
 // TestValidateRelativePathRejectsTraversal verifies unsafe or escaping relative paths are rejected.
@@ -336,24 +239,6 @@ func TestReadRelativeFileMissingReturnsNotExist(t *testing.T) {
 
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("ReadRelativeFile() err = %v, want ErrNotExist (data=%q)", err, data)
-	}
-}
-
-func writeTaskfileFixture(t *testing.T, fix *taskfileFixture) {
-	t.Helper()
-
-	err := os.MkdirAll(filepath.Join(fix.root, folderTaskfiles, consts.Go), consts.FilePerm755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(
-		filepath.Join(fix.root, filepath.FromSlash(fix.rel)),
-		fix.data,
-		consts.FilePerm644,
-	)
-	if err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -418,28 +303,6 @@ func TestValidateTaskName(t *testing.T) {
 
 	invalid := []string{consts.Empty, "Go", "go/test", `go\test`, "go..test", "-go"}
 	assertAllTaskNamesInvalid(t, invalid)
-}
-
-func assertAllTaskNamesValid(t *testing.T, names []string) {
-	t.Helper()
-
-	for i := range names {
-		err := pathutil.ValidateTaskName(names[i])
-		if err != nil {
-			t.Fatalf("ValidateTaskName(%q) error = %v", names[i], err)
-		}
-	}
-}
-
-func assertAllTaskNamesInvalid(t *testing.T, names []string) {
-	t.Helper()
-
-	for i := range names {
-		err := pathutil.ValidateTaskName(names[i])
-		if err == nil {
-			t.Fatalf("ValidateTaskName(%q) expected error", names[i])
-		}
-	}
 }
 
 // TestValidateTargetFolder verifies a messy target folder input normalizes to a clean path.
@@ -583,20 +446,6 @@ func TestIsDocPath(t *testing.T) {
 	)
 }
 
-func isDocPathCases() []boolCase {
-	return []boolCase{
-		{consts.ReadmeMD, true},
-		{"docs/setup.md", true},
-		{"docs/a/b.md", true},
-		{"go/docs/setup.md", true},
-		{"go/README.md", false},
-		{"mydocs/x", false},
-		{"docs", false},
-		{"readme.md", false},
-		{pathTaskfileYML, false},
-	}
-}
-
 // TestPathErrorFieldNameAndDetail covers FieldName and Detail helpers.
 func TestPathErrorFieldNameAndDetail(t *testing.T) {
 	t.Parallel()
@@ -620,5 +469,156 @@ func TestPathErrorFieldNameEmptyExtras(t *testing.T) {
 
 	if err.FieldName() != testFieldTasks {
 		t.Fatalf("FieldName() = %q", err.FieldName())
+	}
+}
+
+func blockDir(t *testing.T, path string) {
+	t.Helper()
+
+	mkdirOrFail(t, path, consts.FilePerm755)
+	chmodOrFail(t, path, consts.IndexZero)
+	t.Cleanup(func() { iox.Discard(os.Chmod(path, consts.FilePerm755)) })
+}
+
+func chmodOrFail(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+
+	err := os.Chmod(path, mode)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func linkTargetSymlink(t *testing.T, workspace string) {
+	t.Helper()
+
+	target := filepath.Join(workspace, "real")
+	mkdirOrFail(t, filepath.Join(target, testFieldTasks), consts.FilePerm755)
+	symlinkOrSkip(t, target, filepath.Join(workspace, linkName))
+}
+
+func mkdirOrFail(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+
+	err := os.MkdirAll(path, mode)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func symlinkOrSkip(t *testing.T, target, link string) {
+	t.Helper()
+
+	err := os.Symlink(target, link)
+	if err != nil {
+		t.Skip("symlink not permitted")
+	}
+}
+
+func isTestPathCases() []boolCase {
+	return []boolCase{
+		{"go_test.go", true},
+		{"eslint_test.ts", true},
+		{"nested/pkg/foo_test.go", true},
+		{pathTaskfileYML, false},
+		{consts.ReadmeMD, false},
+		{"latest.txt", false},
+	}
+}
+
+func hasFolderPrefixCases() []folderPrefixCase {
+	return []folderPrefixCase{
+		{testTaskfilesGo, folderTaskfiles, true},
+		{pathGoTaskfile, folderTaskfiles, true},
+		{folderTask, folderTask, true},
+		{"taskfiles-extra/foo", folderTask, false},
+		{"task/extra", folderTaskfiles, false},
+		{consts.Empty, folderTaskfiles, false},
+	}
+}
+
+func assertFolderPrefixCases(t *testing.T, cases []folderPrefixCase) {
+	t.Helper()
+
+	for i := range cases {
+		testCase := &cases[i]
+		got := pathutil.HasFolderPrefix(testCase.path, testCase.folder)
+
+		if got != testCase.want {
+			t.Fatalf(
+				"HasFolderPrefix(%q, %q) = %t, want %t",
+				testCase.path,
+				testCase.folder,
+				got,
+				testCase.want,
+			)
+		}
+	}
+}
+
+func assertBoolCases(t *testing.T, spec *boolAssert) {
+	t.Helper()
+
+	for i := range spec.cases {
+		testCase := &spec.cases[i]
+		got := spec.fn(testCase.path)
+
+		if got != testCase.want {
+			t.Fatalf("%s(%q) = %t, want %t", spec.name, testCase.path, got, testCase.want)
+		}
+	}
+}
+
+func writeTaskfileFixture(t *testing.T, fix *taskfileFixture) {
+	t.Helper()
+
+	err := os.MkdirAll(filepath.Join(fix.root, folderTaskfiles, consts.Go), consts.FilePerm755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(fix.root, filepath.FromSlash(fix.rel)),
+		fix.data,
+		consts.FilePerm644,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertAllTaskNamesValid(t *testing.T, names []string) {
+	t.Helper()
+
+	for i := range names {
+		err := pathutil.ValidateTaskName(names[i])
+		if err != nil {
+			t.Fatalf("ValidateTaskName(%q) error = %v", names[i], err)
+		}
+	}
+}
+
+func assertAllTaskNamesInvalid(t *testing.T, names []string) {
+	t.Helper()
+
+	for i := range names {
+		err := pathutil.ValidateTaskName(names[i])
+		if err == nil {
+			t.Fatalf("ValidateTaskName(%q) expected error", names[i])
+		}
+	}
+}
+
+func isDocPathCases() []boolCase {
+	return []boolCase{
+		{consts.ReadmeMD, true},
+		{"docs/setup.md", true},
+		{"docs/a/b.md", true},
+		{"go/docs/setup.md", true},
+		{"go/README.md", false},
+		{"mydocs/x", false},
+		{"docs", false},
+		{"readme.md", false},
+		{pathTaskfileYML, false},
 	}
 }

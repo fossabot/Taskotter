@@ -346,31 +346,6 @@ func TestConfigureCredentialsReportsRemoteFailure(t *testing.T) {
 	assertFails(t, err)
 }
 
-func assertFails(t *testing.T, err error) {
-	t.Helper()
-
-	if err == nil {
-		t.Fatal(wantErrText)
-	}
-}
-
-func assertRefRejected(t *testing.T, err error) {
-	t.Helper()
-
-	if err == nil {
-		t.Fatal("expected ref validation error")
-	}
-}
-
-func writeStageFixture(t *testing.T, workspace string) {
-	t.Helper()
-
-	err := os.WriteFile(filepath.Join(workspace, stageFile), []byte("data"), consts.FilePerm644)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestCommandsSucceedWithStubbedGit verifies the success paths of the mutating commands.
 //
 //nolint:paralleltest // swaps the package-level gitBinary seam
@@ -432,6 +407,31 @@ func TestOriginHeadCommitReportsRefListFailure(t *testing.T) {
 //nolint:paralleltest // swaps the package-level gitBinary seam
 func TestOriginHeadCommitReportsMissingBranch(t *testing.T) {
 	assertOriginHeadCommitFails(t, stubNoRefs)
+}
+
+func assertFails(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal(wantErrText)
+	}
+}
+
+func assertRefRejected(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected ref validation error")
+	}
+}
+
+func writeStageFixture(t *testing.T, workspace string) {
+	t.Helper()
+
+	err := os.WriteFile(filepath.Join(workspace, stageFile), []byte("data"), consts.FilePerm644)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assertDefaultBranch(t *testing.T, mode, want string) {

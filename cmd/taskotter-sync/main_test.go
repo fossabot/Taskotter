@@ -235,6 +235,54 @@ func (stub *stubOrchestrator) Run(
 	return stub.result, nil
 }
 
+// TestWireOrchestratorInvalidRepository verifies an invalid repository coordinate fails construction.
+func TestWireOrchestratorInvalidRepository(t *testing.T) {
+	t.Parallel()
+
+	orch, err := WireOrchestrator(t.Context(), invalidRepoOrchestratorConfig())
+	iox.Discard(orch)
+
+	if err == nil {
+		t.Fatal("expected repository parse error")
+	}
+}
+
+// TestWireOrchestratorWithoutRepository verifies an empty repository wires successfully.
+func TestWireOrchestratorWithoutRepository(t *testing.T) {
+	t.Parallel()
+
+	cfg := invalidRepoOrchestratorConfig()
+
+	cfg.Repository = consts.Empty
+
+	orch, err := WireOrchestrator(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf(consts.UnexpectedErr, err)
+	}
+
+	if orch == nil {
+		t.Fatal(errExpectedOrchestrator)
+	}
+}
+
+// TestWireOrchestratorWithRepository verifies a valid repository wires successfully.
+func TestWireOrchestratorWithRepository(t *testing.T) {
+	t.Parallel()
+
+	cfg := invalidRepoOrchestratorConfig()
+
+	cfg.Repository = testRepository
+
+	orch, err := WireOrchestrator(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf(consts.UnexpectedErr, err)
+	}
+
+	if orch == nil {
+		t.Fatal(errExpectedOrchestrator)
+	}
+}
+
 func swapOrchestrator(t *testing.T, stub *stubOrchestrator) {
 	t.Helper()
 
@@ -327,54 +375,6 @@ func unchangedResult() *rundomain.Result {
 	return &rundomain.Result{
 		Changed:   false,
 		SourceSHA: sourceSHAHex,
-	}
-}
-
-// TestWireOrchestratorInvalidRepository verifies an invalid repository coordinate fails construction.
-func TestWireOrchestratorInvalidRepository(t *testing.T) {
-	t.Parallel()
-
-	orch, err := WireOrchestrator(t.Context(), invalidRepoOrchestratorConfig())
-	iox.Discard(orch)
-
-	if err == nil {
-		t.Fatal("expected repository parse error")
-	}
-}
-
-// TestWireOrchestratorWithoutRepository verifies an empty repository wires successfully.
-func TestWireOrchestratorWithoutRepository(t *testing.T) {
-	t.Parallel()
-
-	cfg := invalidRepoOrchestratorConfig()
-
-	cfg.Repository = consts.Empty
-
-	orch, err := WireOrchestrator(t.Context(), cfg)
-	if err != nil {
-		t.Fatalf(consts.UnexpectedErr, err)
-	}
-
-	if orch == nil {
-		t.Fatal(errExpectedOrchestrator)
-	}
-}
-
-// TestWireOrchestratorWithRepository verifies a valid repository wires successfully.
-func TestWireOrchestratorWithRepository(t *testing.T) {
-	t.Parallel()
-
-	cfg := invalidRepoOrchestratorConfig()
-
-	cfg.Repository = testRepository
-
-	orch, err := WireOrchestrator(t.Context(), cfg)
-	if err != nil {
-		t.Fatalf(consts.UnexpectedErr, err)
-	}
-
-	if orch == nil {
-		t.Fatal(errExpectedOrchestrator)
 	}
 }
 

@@ -260,30 +260,6 @@ func TestMergeIncludeVarsSkipsNonMappingNodes(t *testing.T) {
 	}
 }
 
-func assertRewriteNoop(t *testing.T, content []byte) {
-	t.Helper()
-
-	out, err := RewriteIncludes(content, pnpmMapping(), fromDestESLint)
-	if err != nil {
-		t.Fatalf(consts.UnexpectedErr, err)
-	}
-
-	if !bytes.Equal(out, content) {
-		t.Fatalf("content changed: %s", out)
-	}
-}
-
-func moduleVarsNode() *yaml.Node {
-	vars := newYAMLMappingNode()
-	appendMappingPair(vars, yamlScalar(varKeyName), yamlScalar(goVersion122))
-
-	return vars
-}
-
-func pnpmMapping() map[string]string {
-	return map[string]string{pnpmModule: pnpmModule}
-}
-
 // TestOverridableRootVarSkipsNilAndNonScalar verifies the expected behavior.
 func TestOverridableRootVarSkipsNilAndNonScalar(t *testing.T) {
 	t.Parallel()
@@ -653,70 +629,6 @@ func TestCloneYAMLNodeCopiesNestedContent(t *testing.T) {
 	}
 }
 
-func assertPathUnchanged(t *testing.T, path string, mapping map[string]string) {
-	t.Helper()
-
-	if got := rewriteIncludePath(path, mapping, fromDestESLint); got != path {
-		t.Fatalf("rewriteIncludePath(%q) = %q", path, got)
-	}
-}
-
-func assertRewriteFails(t *testing.T, content []byte) {
-	t.Helper()
-
-	out, err := RewriteIncludes(content, map[string]string{pnpmModule: pnpmModule}, fromDestESLint)
-	iox.Discard(out)
-	assertFails(t, err)
-}
-
-func assertRootUpdateFails(t *testing.T, content []byte, input *ports.RootUpdateInput) {
-	t.Helper()
-
-	out, err := UpdateRootTaskfile(content, input)
-	iox.Discard(out)
-	assertFails(t, err)
-}
-
-func bytesContain(content []byte, want string) bool {
-	return strings.Contains(string(content), want)
-}
-
-func goRootInput() *ports.RootUpdateInput {
-	return &ports.RootUpdateInput{
-		Tasks:            []string{goTask},
-		TargetFolder:     folderTaskfile,
-		RootTaskfileDir:  consts.Empty,
-		DestByTask:       map[string]string{goTask: goTask},
-		ManagedTasks:     nil,
-		ModuleTaskfiles:  map[string][]byte{goTask: []byte(moduleWithVars)},
-		GeneratedTasks:   nil,
-		ManagedRootTasks: nil,
-	}
-}
-
-func mappingWithSequenceTaskfile() *yaml.Node {
-	entry := newYAMLMappingNode()
-	appendMappingPair(entry, yamlScalar(keyTaskfile), newYAMLSequenceNodeForTest())
-
-	return entry
-}
-
-func failIfErr(t *testing.T, err error) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatalf(consts.UnexpectedErr, err)
-	}
-}
-
-func emptyDocumentNode() *yaml.Node {
-	return &yaml.Node{Kind: yaml.DocumentNode}
-}
-
-func newYAMLSequenceNodeForTest() *yaml.Node {
-	return &yaml.Node{Kind: yaml.SequenceNode}
-}
-
 // TestQuoteForYAMLStyleMapsQuotedStyles verifies each scalar style maps to its quote byte.
 func TestQuoteForYAMLStyleMapsQuotedStyles(t *testing.T) {
 	t.Parallel()
@@ -891,6 +803,130 @@ func TestIncludePathSpanForReplacementReportsFailures(t *testing.T) {
 	assertFails(t, err)
 }
 
+// TestRawVarHelpersCoverReplacementBranches verifies the behavior covered by this test.
+func TestRawVarHelpersCoverReplacementBranches(t *testing.T) {
+	t.Parallel()
+
+	raw := map[string]string{
+		rawVarA:  "one",
+		rawVarAA: "two",
+		rawVarB:  consts.Empty,
+	}
+	assertRawVarReplacement(t, raw)
+}
+
+// TestRawBlockOffsetHelpersCoverBounds verifies the behavior covered by this test.
+func TestRawBlockOffsetHelpersCoverBounds(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("vars:\n  A: |\n    one\n")
+
+	assertRawBlockOffsets(t, content)
+	assertRawBlockLineTraversal(t)
+}
+
+// TestStoreExtractedVarsSkipsNilAndNotOK verifies the behavior covered by this test.
+func TestStoreExtractedVarsSkipsNilAndNotOK(t *testing.T) {
+	t.Parallel()
+
+	result := &rootVarsResult{byTask: map[string]*yaml.Node{}, raw: map[string]string{}}
+
+	storeExtractedVars(result, "nil", nil)
+	storeExtractedVars(result, "not-ok", &extractedVars{})
+
+	if len(result.byTask) != consts.IndexZero {
+		t.Fatalf("byTask = %#v", result.byTask)
+	}
+}
+
+func assertRewriteNoop(t *testing.T, content []byte) {
+	t.Helper()
+
+	out, err := RewriteIncludes(content, pnpmMapping(), fromDestESLint)
+	if err != nil {
+		t.Fatalf(consts.UnexpectedErr, err)
+	}
+
+	if !bytes.Equal(out, content) {
+		t.Fatalf("content changed: %s", out)
+	}
+}
+
+func moduleVarsNode() *yaml.Node {
+	vars := newYAMLMappingNode()
+	appendMappingPair(vars, yamlScalar(varKeyName), yamlScalar(goVersion122))
+
+	return vars
+}
+
+func pnpmMapping() map[string]string {
+	return map[string]string{pnpmModule: pnpmModule}
+}
+
+func assertPathUnchanged(t *testing.T, path string, mapping map[string]string) {
+	t.Helper()
+
+	if got := rewriteIncludePath(path, mapping, fromDestESLint); got != path {
+		t.Fatalf("rewriteIncludePath(%q) = %q", path, got)
+	}
+}
+
+func assertRewriteFails(t *testing.T, content []byte) {
+	t.Helper()
+
+	out, err := RewriteIncludes(content, map[string]string{pnpmModule: pnpmModule}, fromDestESLint)
+	iox.Discard(out)
+	assertFails(t, err)
+}
+
+func assertRootUpdateFails(t *testing.T, content []byte, input *ports.RootUpdateInput) {
+	t.Helper()
+
+	out, err := UpdateRootTaskfile(content, input)
+	iox.Discard(out)
+	assertFails(t, err)
+}
+
+func bytesContain(content []byte, want string) bool {
+	return strings.Contains(string(content), want)
+}
+
+func goRootInput() *ports.RootUpdateInput {
+	return &ports.RootUpdateInput{
+		Tasks:            []string{goTask},
+		TargetFolder:     folderTaskfile,
+		RootTaskfileDir:  consts.Empty,
+		DestByTask:       map[string]string{goTask: goTask},
+		ManagedTasks:     nil,
+		ModuleTaskfiles:  map[string][]byte{goTask: []byte(moduleWithVars)},
+		GeneratedTasks:   nil,
+		ManagedRootTasks: nil,
+	}
+}
+
+func mappingWithSequenceTaskfile() *yaml.Node {
+	entry := newYAMLMappingNode()
+	appendMappingPair(entry, yamlScalar(keyTaskfile), newYAMLSequenceNodeForTest())
+
+	return entry
+}
+
+func failIfErr(t *testing.T, err error) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf(consts.UnexpectedErr, err)
+	}
+}
+
+func emptyDocumentNode() *yaml.Node {
+	return &yaml.Node{Kind: yaml.DocumentNode}
+}
+
+func newYAMLSequenceNodeForTest() *yaml.Node {
+	return &yaml.Node{Kind: yaml.SequenceNode}
+}
+
 func assertClosingQuote(t *testing.T, testCase *closingQuoteCase) {
 	t.Helper()
 
@@ -985,18 +1021,6 @@ func newReplacement() *includePathReplacement {
 	}
 }
 
-// TestRawVarHelpersCoverReplacementBranches verifies the behavior covered by this test.
-func TestRawVarHelpersCoverReplacementBranches(t *testing.T) {
-	t.Parallel()
-
-	raw := map[string]string{
-		rawVarA:  "one",
-		rawVarAA: "two",
-		rawVarB:  consts.Empty,
-	}
-	assertRawVarReplacement(t, raw)
-}
-
 func assertRawVarReplacement(t *testing.T, raw map[string]string) {
 	t.Helper()
 
@@ -1030,16 +1054,6 @@ func assertRawVarSplice(t *testing.T, raw map[string]string) {
 	if !bytes.Contains(out, []byte("two one")) {
 		t.Fatalf("spliced = %q", out)
 	}
-}
-
-// TestRawBlockOffsetHelpersCoverBounds verifies the behavior covered by this test.
-func TestRawBlockOffsetHelpersCoverBounds(t *testing.T) {
-	t.Parallel()
-
-	content := []byte("vars:\n  A: |\n    one\n")
-
-	assertRawBlockOffsets(t, content)
-	assertRawBlockLineTraversal(t)
 }
 
 //nolint:funlen,maintidx // This test helper deliberately lists each boundary assertion.
@@ -1105,19 +1119,5 @@ func assertInt(t *testing.T, assertion *intAssertion) {
 
 	if assertion.got != assertion.want {
 		t.Fatalf("%s = %d, want %d", assertion.label, assertion.got, assertion.want)
-	}
-}
-
-// TestStoreExtractedVarsSkipsNilAndNotOK verifies the behavior covered by this test.
-func TestStoreExtractedVarsSkipsNilAndNotOK(t *testing.T) {
-	t.Parallel()
-
-	result := &rootVarsResult{byTask: map[string]*yaml.Node{}, raw: map[string]string{}}
-
-	storeExtractedVars(result, "nil", nil)
-	storeExtractedVars(result, "not-ok", &extractedVars{})
-
-	if len(result.byTask) != consts.IndexZero {
-		t.Fatalf("byTask = %#v", result.byTask)
 	}
 }

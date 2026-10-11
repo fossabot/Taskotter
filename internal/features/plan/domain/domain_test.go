@@ -87,6 +87,19 @@ func TestSyncErrorErrorReturnsMessage(t *testing.T) {
 	}
 }
 
+// TestDecodeMetadataYAMLRejectsInvalidYAML covers decode failure and non-document unwrap.
+func TestDecodeMetadataYAMLRejectsInvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	var meta state.Metadata
+
+	assertFails(t, DecodeMetadataYAML([]byte(":\t"), &meta))
+
+	if yamlDocumentContent(nil) != nil {
+		t.Fatal("nil document")
+	}
+}
+
 func assertFails(t *testing.T, err error) {
 	t.Helper()
 
@@ -207,17 +220,4 @@ func unmarshalMetaOK(t *testing.T, payload string, meta *state.Metadata) {
 
 func yamlScalarNode(value string) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Value: value}
-}
-
-// TestDecodeMetadataYAMLRejectsInvalidYAML covers decode failure and non-document unwrap.
-func TestDecodeMetadataYAMLRejectsInvalidYAML(t *testing.T) {
-	t.Parallel()
-
-	var meta state.Metadata
-
-	assertFails(t, DecodeMetadataYAML([]byte(":\t"), &meta))
-
-	if yamlDocumentContent(nil) != nil {
-		t.Fatal("nil document")
-	}
 }

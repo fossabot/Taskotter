@@ -25,6 +25,23 @@ func TestCodecErrorPaths(t *testing.T) {
 	assertInvalidMappingErrors(t)
 }
 
+// TestCodecHelpersHandleDocumentsAndMissingFields verifies document and optional-field behavior.
+func TestCodecHelpersHandleDocumentsAndMissingFields(t *testing.T) {
+	t.Parallel()
+	assertDocumentContent(t)
+	assertMappingFieldHandling(t)
+	assertMissingField(t)
+}
+
+// TestSyncErrorReturnsMessage verifies the error string is preserved.
+func TestSyncErrorReturnsMessage(t *testing.T) {
+	t.Parallel()
+
+	if got := SyncError(testMessage).Error(); got != testMessage {
+		t.Fatalf("Error() = %q, want message", got)
+	}
+}
+
 func assertInvalidDocumentErrors(t *testing.T) {
 	t.Helper()
 
@@ -80,14 +97,6 @@ func assertInvalidMappingErrors(t *testing.T) {
 	))
 }
 
-// TestCodecHelpersHandleDocumentsAndMissingFields verifies document and optional-field behavior.
-func TestCodecHelpersHandleDocumentsAndMissingFields(t *testing.T) {
-	t.Parallel()
-	assertDocumentContent(t)
-	assertMappingFieldHandling(t)
-	assertMissingField(t)
-}
-
 func assertDocumentContent(t *testing.T) {
 	t.Helper()
 
@@ -127,15 +136,6 @@ func assertMissingField(t *testing.T) {
 	err := decodeYAMLField(nil, testMissing, new(string))
 	if err != nil {
 		t.Fatalf("decodeYAMLField() error = %v", err)
-	}
-}
-
-// TestSyncErrorReturnsMessage verifies the error string is preserved.
-func TestSyncErrorReturnsMessage(t *testing.T) {
-	t.Parallel()
-
-	if got := SyncError(testMessage).Error(); got != testMessage {
-		t.Fatalf("Error() = %q, want message", got)
 	}
 }
 

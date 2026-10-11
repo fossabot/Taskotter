@@ -50,6 +50,89 @@ const (
 		"variants: []\n"
 )
 
+// BenchmarkBuildPlan measures performance.
+func BenchmarkBuildPlan(b *testing.B) {
+	input := prepareBenchmarkInput(b)
+	runBuildPlanBenchmark(b, &input)
+}
+
+// BenchmarkBuildPlanSynthetic measures an end-to-end sync plan build over a synthetic store.
+func BenchmarkBuildPlanSynthetic(b *testing.B) {
+	input := benchSyncInput(b)
+
+	for b.Loop() {
+		plan, err := planpkg.BuildPlan(&input)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(plan)
+	}
+}
+
+// BenchmarkPlan measures performance.
+func BenchmarkPlan(b *testing.B) {
+	BenchmarkBuildPlan(b)
+}
+
+// BenchmarkDiff measures performance.
+func BenchmarkDiff(b *testing.B) {
+	input := prepareBenchmarkInput(b)
+
+	plan, err := planpkg.BuildPlan(&input)
+	iox.Discard(plan)
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	runBuildPlanBenchmark(b, &input)
+}
+
+// BenchmarkUpdateRootTaskfile measures performance.
+func BenchmarkUpdateRootTaskfile(b *testing.B) {
+	template := taskfile.NewRootTemplate()
+	input := &rootupd.RootUpdateInput{
+		TargetFolder: testTargetFolderTaskfiles,
+		Tasks:        []string{consts.Go},
+		ManagedTasks: []string{consts.Go},
+		DestByTask:   map[string]string{consts.Go: consts.Go},
+		ModuleTaskfiles: map[string][]byte{
+			consts.Go: []byte("version: \"3\"\nvars:\n  GO_VER: 1.26.5\n"),
+		},
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := taskfile.UpdateRootTaskfile(template, input)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkRewriteIncludes measures performance.
+func BenchmarkRewriteIncludes(b *testing.B) {
+	input := []byte(
+		"version: \"3\"\nincludes:\n  pnpm:\n    taskfile: \"" + testPNPMIncludePath + "\"\n",
+	)
+	mapping := map[string]string{
+		testPNPMIncludePath: "../pnpm/Taskfile.yml",
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := taskfile.RewriteIncludes(input, mapping, testModuleESLintNodePNPM)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func benchModuleName(idx int) string {
 	return benchModulePrefix + strconv.Itoa(idx)
 }
@@ -204,12 +287,6 @@ func prepareSyncInputBench(
 	return input
 }
 
-// BenchmarkBuildPlan measures performance.
-func BenchmarkBuildPlan(b *testing.B) {
-	input := prepareBenchmarkInput(b)
-	runBuildPlanBenchmark(b, &input)
-}
-
 func prepareBenchmarkInput(b *testing.B) plandomain.SyncInput {
 	b.Helper()
 
@@ -227,83 +304,6 @@ func runBuildPlanBenchmark(b *testing.B, input *plandomain.SyncInput) {
 
 	for b.Loop() {
 		_, err := planpkg.BuildPlan(input)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkBuildPlanSynthetic measures an end-to-end sync plan build over a synthetic store.
-func BenchmarkBuildPlanSynthetic(b *testing.B) {
-	input := benchSyncInput(b)
-
-	for b.Loop() {
-		plan, err := planpkg.BuildPlan(&input)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(plan)
-	}
-}
-
-// BenchmarkPlan measures performance.
-func BenchmarkPlan(b *testing.B) {
-	BenchmarkBuildPlan(b)
-}
-
-// BenchmarkDiff measures performance.
-func BenchmarkDiff(b *testing.B) {
-	input := prepareBenchmarkInput(b)
-
-	plan, err := planpkg.BuildPlan(&input)
-	iox.Discard(plan)
-
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	runBuildPlanBenchmark(b, &input)
-}
-
-// BenchmarkUpdateRootTaskfile measures performance.
-func BenchmarkUpdateRootTaskfile(b *testing.B) {
-	template := taskfile.NewRootTemplate()
-	input := &rootupd.RootUpdateInput{
-		TargetFolder: testTargetFolderTaskfiles,
-		Tasks:        []string{consts.Go},
-		ManagedTasks: []string{consts.Go},
-		DestByTask:   map[string]string{consts.Go: consts.Go},
-		ModuleTaskfiles: map[string][]byte{
-			consts.Go: []byte("version: \"3\"\nvars:\n  GO_VER: 1.26.5\n"),
-		},
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := taskfile.UpdateRootTaskfile(template, input)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkRewriteIncludes measures performance.
-func BenchmarkRewriteIncludes(b *testing.B) {
-	input := []byte(
-		"version: \"3\"\nincludes:\n  pnpm:\n    taskfile: \"" + testPNPMIncludePath + "\"\n",
-	)
-	mapping := map[string]string{
-		testPNPMIncludePath: "../pnpm/Taskfile.yml",
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := taskfile.RewriteIncludes(input, mapping, testModuleESLintNodePNPM)
 		if err != nil {
 			b.Fatal(err)
 		}

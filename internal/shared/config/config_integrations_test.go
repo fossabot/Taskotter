@@ -59,16 +59,6 @@ const (
 	inputRootTaskfile = "INPUT_ROOT_TASKFILE"
 )
 
-func targetFolderCases() []targetFolderCase {
-	return []targetFolderCase{
-		{"default nested", "automation/taskfiles", true},
-		{"absolute unix", "/taskfiles", false},
-		{"windows absolute", `C:\taskfiles`, false},
-		{"dot", "../taskfiles", false},
-		{"dot git", ".git", false},
-	}
-}
-
 // TestBunWithVersionManagerRejected verifies the removed version-manager key fails validation.
 //
 //nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
@@ -204,34 +194,6 @@ func TestIncludesDocFlipChangesConfigurationHash(t *testing.T) {
 	cfgFalse := loadIncludesDocConfig(t, dir, testFalseValue)
 
 	assertIncludesDocHashFlip(t, cfgTrue, cfgFalse)
-}
-
-func loadIncludesDocConfig(t *testing.T, dir, value string) *config.Config {
-	t.Helper()
-
-	env := baseEnv(dir)
-
-	env[inputIncludesDoc] = value
-
-	return loadEnvOK(t, env)
-}
-
-func assertIncludesDocHashFlip(t *testing.T, cfgTrue, cfgFalse *config.Config) {
-	t.Helper()
-
-	if cfgTrue.ConfigurationHash == cfgFalse.ConfigurationHash {
-		t.Fatal("ConfigurationHash should change when includes_doc flips")
-	}
-
-	if cfgTrue.BranchName == cfgFalse.BranchName {
-		t.Fatal("BranchName should change when includes_doc flips")
-	}
-
-	wantBranch := "taskotter/sync-" + cfgTrue.ConfigurationHash[:consts.HashPrefixLen]
-
-	if cfgTrue.BranchName != wantBranch {
-		t.Fatalf("BranchName = %q, want %q", cfgTrue.BranchName, wantBranch)
-	}
 }
 
 // TestLoadFromEnvDockerInputEnvNames verifies hyphenated Docker action input env names are read.
@@ -496,6 +458,210 @@ func TestValidationErrorWithoutField(t *testing.T) {
 	}
 }
 
+// TestValidationErrorFieldName covers FieldName.
+func TestValidationErrorFieldName(t *testing.T) {
+	t.Parallel()
+
+	err := &config.ValidationError{Field: testFieldTasks, Message: "required"}
+
+	if err.FieldName() != testFieldTasks {
+		t.Fatalf("FieldName = %q", err.FieldName())
+	}
+}
+
+// TestValidationErrorFieldNameEmptyMessage covers FieldName when Message is empty.
+func TestValidationErrorFieldNameEmptyMessage(t *testing.T) {
+	t.Parallel()
+
+	err := &config.ValidationError{Field: testFieldTasks, Message: consts.Empty}
+
+	if err.FieldName() != testFieldTasks {
+		t.Fatalf("FieldName() = %q", err.FieldName())
+	}
+}
+
+// TestParseJSNodeJSDefaults verifies nodejs runtime defaults to the npm package manager.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSNodeJSDefaults(t *testing.T) {
+	dir := t.TempDir()
+	cfg := loadEnvOK(t, jsEnv(dir, "runtime: nodejs\n"))
+
+	if cfg.JSRuntime != config.JSRuntimeNodeJS {
+		t.Fatalf(fmtJSRuntimeWantNodeJS, cfg.JSRuntime)
+	}
+
+	if cfg.NodePackageManager != config.PMNPM {
+		t.Fatalf("NodePackageManager = %q, want npm", cfg.NodePackageManager)
+	}
+}
+
+// TestParseJSBun verifies bun runtime sets the bun package manager.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSBun(t *testing.T) {
+	dir := t.TempDir()
+	cfg := loadEnvOK(t, jsEnv(dir, "runtime: bun\n"))
+
+	if cfg.JSRuntime != config.JSRuntimeBun {
+		t.Fatalf("JSRuntime = %q, want bun", cfg.JSRuntime)
+	}
+
+	if cfg.NodePackageManager != config.JSRuntimeBun {
+		t.Fatalf("NodePackageManager = %q, want bun", cfg.NodePackageManager)
+	}
+}
+
+// TestParseJSBunRejectsVersionManager verifies the removed version-manager key fails under bun.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSBunRejectsVersionManager(t *testing.T) {
+	dir := t.TempDir()
+	env := baseEnv(dir)
+
+	env[consts.InputJS] = testJSBunWithFnm
+	loadEnvExpectError(t, env, consts.ExpectedValidErr)
+}
+
+// TestParseJSBunRejectsPackageManager verifies bun runtime with an explicit package-manager fails.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSBunRejectsPackageManager(t *testing.T) {
+	dir := t.TempDir()
+	env := baseEnv(dir)
+
+	env[consts.InputJS] = "runtime: bun\npackage-manager: pnpm\n"
+	loadEnvExpectError(t, env, consts.ExpectedValidErr)
+}
+
+// TestParseJSNodeJSRejectsBunPackageManager verifies nodejs runtime rejects the bun package manager.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSNodeJSRejectsBunPackageManager(t *testing.T) {
+	dir := t.TempDir()
+	env := baseEnv(dir)
+
+	env[consts.InputJS] = "runtime: nodejs\npackage-manager: bun\n"
+	loadEnvExpectError(t, env, consts.ExpectedValidErr)
+}
+
+// TestParseJSEmpty verifies an empty js input leaves runtime and package manager unset.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSEmpty(t *testing.T) {
+	dir := t.TempDir()
+	setEnv(t, baseEnv(dir))
+
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.JSRuntime != consts.Empty {
+		t.Fatalf("JSRuntime = %q, want empty", cfg.JSRuntime)
+	}
+
+	if cfg.NodePackageManager != consts.Empty {
+		t.Fatalf("NodePackageManager = %q, want empty", cfg.NodePackageManager)
+	}
+}
+
+// TestParseJSDefaultsRuntimeToNodeJS verifies the runtime defaults to nodejs when unset.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSDefaultsRuntimeToNodeJS(t *testing.T) {
+	dir := t.TempDir()
+	env := baseEnv(dir)
+
+	env[consts.InputJS] = "package-manager: yarn\n"
+	setEnv(t, env)
+
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.JSRuntime != config.JSRuntimeNodeJS {
+		t.Fatalf(fmtJSRuntimeWantNodeJS, cfg.JSRuntime)
+	}
+}
+
+// TestParseJSRejectsInvalidYAML verifies malformed js YAML input is rejected.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSRejectsInvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	env := baseEnv(dir)
+
+	env[consts.InputJS] = ":"
+	loadEnvExpectError(t, env, "expected invalid YAML error")
+}
+
+// TestParseJSRejectsInvalidRuntime verifies an unrecognized runtime value is rejected.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSRejectsInvalidRuntime(t *testing.T) {
+	dir := t.TempDir()
+	env := baseEnv(dir)
+
+	env[consts.InputJS] = "runtime: deno\n"
+	loadEnvExpectError(t, env, "expected invalid runtime error")
+}
+
+// TestParseJSRejectsVersionManager verifies the removed version-manager key is rejected outright,
+// including values that were valid before the store dropped its fnm and nvm variants.
+//
+//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
+func TestParseJSRejectsVersionManager(t *testing.T) {
+	removed := []string{"fnm", "nvm", "volta"}
+
+	for i := range removed {
+		dir := t.TempDir()
+		env := baseEnv(dir)
+
+		env[consts.InputJS] = "runtime: nodejs\nversion-manager: " + removed[i] + "\n"
+		loadEnvExpectError(t, env, "expected removed version-manager error")
+	}
+}
+
+func targetFolderCases() []targetFolderCase {
+	return []targetFolderCase{
+		{"default nested", "automation/taskfiles", true},
+		{"absolute unix", "/taskfiles", false},
+		{"windows absolute", `C:\taskfiles`, false},
+		{"dot", "../taskfiles", false},
+		{"dot git", ".git", false},
+	}
+}
+
+func loadIncludesDocConfig(t *testing.T, dir, value string) *config.Config {
+	t.Helper()
+
+	env := baseEnv(dir)
+
+	env[inputIncludesDoc] = value
+
+	return loadEnvOK(t, env)
+}
+
+func assertIncludesDocHashFlip(t *testing.T, cfgTrue, cfgFalse *config.Config) {
+	t.Helper()
+
+	if cfgTrue.ConfigurationHash == cfgFalse.ConfigurationHash {
+		t.Fatal("ConfigurationHash should change when includes_doc flips")
+	}
+
+	if cfgTrue.BranchName == cfgFalse.BranchName {
+		t.Fatal("BranchName should change when includes_doc flips")
+	}
+
+	wantBranch := "taskotter/sync-" + cfgTrue.ConfigurationHash[:consts.HashPrefixLen]
+
+	if cfgTrue.BranchName != wantBranch {
+		t.Fatalf("BranchName = %q, want %q", cfgTrue.BranchName, wantBranch)
+	}
+}
+
 func assertDefaultPaths(t *testing.T, cfg *config.Config) {
 	t.Helper()
 
@@ -660,176 +826,10 @@ func setEnv(t *testing.T, kv map[string]string) {
 	}
 }
 
-// TestValidationErrorFieldName covers FieldName.
-func TestValidationErrorFieldName(t *testing.T) {
-	t.Parallel()
-
-	err := &config.ValidationError{Field: testFieldTasks, Message: "required"}
-
-	if err.FieldName() != testFieldTasks {
-		t.Fatalf("FieldName = %q", err.FieldName())
-	}
-}
-
-// TestValidationErrorFieldNameEmptyMessage covers FieldName when Message is empty.
-func TestValidationErrorFieldNameEmptyMessage(t *testing.T) {
-	t.Parallel()
-
-	err := &config.ValidationError{Field: testFieldTasks, Message: consts.Empty}
-
-	if err.FieldName() != testFieldTasks {
-		t.Fatalf("FieldName() = %q", err.FieldName())
-	}
-}
-
 func jsEnv(dir, jsValue string) map[string]string {
 	env := baseEnv(dir)
 
 	env[consts.InputJS] = jsValue
 
 	return env
-}
-
-// TestParseJSNodeJSDefaults verifies nodejs runtime defaults to the npm package manager.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSNodeJSDefaults(t *testing.T) {
-	dir := t.TempDir()
-	cfg := loadEnvOK(t, jsEnv(dir, "runtime: nodejs\n"))
-
-	if cfg.JSRuntime != config.JSRuntimeNodeJS {
-		t.Fatalf(fmtJSRuntimeWantNodeJS, cfg.JSRuntime)
-	}
-
-	if cfg.NodePackageManager != config.PMNPM {
-		t.Fatalf("NodePackageManager = %q, want npm", cfg.NodePackageManager)
-	}
-}
-
-// TestParseJSBun verifies bun runtime sets the bun package manager.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSBun(t *testing.T) {
-	dir := t.TempDir()
-	cfg := loadEnvOK(t, jsEnv(dir, "runtime: bun\n"))
-
-	if cfg.JSRuntime != config.JSRuntimeBun {
-		t.Fatalf("JSRuntime = %q, want bun", cfg.JSRuntime)
-	}
-
-	if cfg.NodePackageManager != config.JSRuntimeBun {
-		t.Fatalf("NodePackageManager = %q, want bun", cfg.NodePackageManager)
-	}
-}
-
-// TestParseJSBunRejectsVersionManager verifies the removed version-manager key fails under bun.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSBunRejectsVersionManager(t *testing.T) {
-	dir := t.TempDir()
-	env := baseEnv(dir)
-
-	env[consts.InputJS] = testJSBunWithFnm
-	loadEnvExpectError(t, env, consts.ExpectedValidErr)
-}
-
-// TestParseJSBunRejectsPackageManager verifies bun runtime with an explicit package-manager fails.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSBunRejectsPackageManager(t *testing.T) {
-	dir := t.TempDir()
-	env := baseEnv(dir)
-
-	env[consts.InputJS] = "runtime: bun\npackage-manager: pnpm\n"
-	loadEnvExpectError(t, env, consts.ExpectedValidErr)
-}
-
-// TestParseJSNodeJSRejectsBunPackageManager verifies nodejs runtime rejects the bun package manager.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSNodeJSRejectsBunPackageManager(t *testing.T) {
-	dir := t.TempDir()
-	env := baseEnv(dir)
-
-	env[consts.InputJS] = "runtime: nodejs\npackage-manager: bun\n"
-	loadEnvExpectError(t, env, consts.ExpectedValidErr)
-}
-
-// TestParseJSEmpty verifies an empty js input leaves runtime and package manager unset.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSEmpty(t *testing.T) {
-	dir := t.TempDir()
-	setEnv(t, baseEnv(dir))
-
-	cfg, err := config.LoadFromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.JSRuntime != consts.Empty {
-		t.Fatalf("JSRuntime = %q, want empty", cfg.JSRuntime)
-	}
-
-	if cfg.NodePackageManager != consts.Empty {
-		t.Fatalf("NodePackageManager = %q, want empty", cfg.NodePackageManager)
-	}
-}
-
-// TestParseJSDefaultsRuntimeToNodeJS verifies the runtime defaults to nodejs when unset.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSDefaultsRuntimeToNodeJS(t *testing.T) {
-	dir := t.TempDir()
-	env := baseEnv(dir)
-
-	env[consts.InputJS] = "package-manager: yarn\n"
-	setEnv(t, env)
-
-	cfg, err := config.LoadFromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.JSRuntime != config.JSRuntimeNodeJS {
-		t.Fatalf(fmtJSRuntimeWantNodeJS, cfg.JSRuntime)
-	}
-}
-
-// TestParseJSRejectsInvalidYAML verifies malformed js YAML input is rejected.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSRejectsInvalidYAML(t *testing.T) {
-	dir := t.TempDir()
-	env := baseEnv(dir)
-
-	env[consts.InputJS] = ":"
-	loadEnvExpectError(t, env, "expected invalid YAML error")
-}
-
-// TestParseJSRejectsInvalidRuntime verifies an unrecognized runtime value is rejected.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSRejectsInvalidRuntime(t *testing.T) {
-	dir := t.TempDir()
-	env := baseEnv(dir)
-
-	env[consts.InputJS] = "runtime: deno\n"
-	loadEnvExpectError(t, env, "expected invalid runtime error")
-}
-
-// TestParseJSRejectsVersionManager verifies the removed version-manager key is rejected outright,
-// including values that were valid before the store dropped its fnm and nvm variants.
-//
-//nolint:paralleltest // LoadFromEnv uses t.Setenv; cannot run in parallel
-func TestParseJSRejectsVersionManager(t *testing.T) {
-	removed := []string{"fnm", "nvm", "volta"}
-
-	for i := range removed {
-		dir := t.TempDir()
-		env := baseEnv(dir)
-
-		env[consts.InputJS] = "runtime: nodejs\nversion-manager: " + removed[i] + "\n"
-		loadEnvExpectError(t, env, "expected removed version-manager error")
-	}
 }

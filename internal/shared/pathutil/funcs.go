@@ -73,6 +73,128 @@ func ValidateTaskName(name string) error {
 	return nil
 }
 
+// ValidateTargetFolder resolves and validates a workspace-relative target folder.
+func ValidateTargetFolder(raw, workspace string) (string, error) {
+	trimmed, normalized, err := normalizeAndValidateTargetFolder(raw)
+	if err != nil {
+		return consts.Empty, fmt.Errorf(errNormalizeTargetFolder, err)
+	}
+
+	evalWorkspace, err := resolveEvalWorkspace(workspace)
+	if err != nil {
+		return consts.Empty, fmt.Errorf("resolve evaluation workspace: %w", err)
+	}
+
+	err = ensureSafeTargetFolder(evalWorkspace, normalized, trimmed)
+	if err != nil {
+		return consts.Empty, fmt.Errorf("ensure safe target folder: %w", err)
+	}
+
+	return normalized, nil
+}
+
+// JoinRelative joins path parts under base using normalized forward slashes.
+func JoinRelative(base string, parts ...string) string {
+	all := append([]string{base}, parts...)
+
+	return NormalizeSlashes(filepath.ToSlash(filepath.Join(toOSParts(all)...)))
+}
+
+// WorkspacePath joins workspace and a slash-separated relative path.
+func WorkspacePath(workspace, rel string) string {
+	return filepath.Join(workspace, filepath.FromSlash(rel))
+}
+
+// ValidateRelativePath checks that rel resolves to a path inside root.
+func ValidateRelativePath(root, rel string) (string, error) {
+	normalized, err := normalizeRelativePath(rel)
+	if err != nil {
+		return consts.Empty, fmt.Errorf("normalize relative path: %w", err)
+	}
+
+	err = validateInsideRoot(root, normalized, rel)
+	if err != nil {
+		return consts.Empty, fmt.Errorf("validate inside root: %w", err)
+	}
+
+	return normalized, nil
+}
+
+// ReadRelativeFile reads rel under root after validating it stays inside root.
+func ReadRelativeFile(root, rel string) ([]byte, error) {
+	absRoot, safeRel, err := resolveValidatedRoot(root, rel)
+	if err != nil {
+		return nil, fmt.Errorf(errResolveValidatedRoot, err)
+	}
+
+	data, err := fs.ReadFile(os.DirFS(absRoot), safeRel)
+	if err != nil {
+		return nil, fmt.Errorf("read file %q: %w", rel, err)
+	}
+
+	return data, nil
+}
+
+// OpenRelativeFile opens rel under root after validating it stays inside root.
+func OpenRelativeFile(root, rel string) (*os.File, error) {
+	absRoot, safeRel, err := resolveValidatedRoot(root, rel)
+	if err != nil {
+		return nil, fmt.Errorf(errResolveValidatedRoot, err)
+	}
+
+	file, err := openDirFSFile(absRoot, safeRel, rel)
+	if err != nil {
+		return nil, fmt.Errorf("open validated file: %w", err)
+	}
+
+	return file, nil
+}
+
+// IsDocPath reports whether rel is documentation copied when includes-doc is enabled.
+func IsDocPath(rel string) bool {
+	rel = NormalizeSlashes(rel)
+
+	if rel == consts.ReadmeMD {
+		return true
+	}
+
+	return strings.HasPrefix(rel, "docs"+consts.PathSepString) ||
+		strings.Contains(rel, consts.PathSepString+"docs"+consts.PathSepString)
+}
+
+// IsModuleMetadataPath reports whether rel is a store module's metadata.yml.
+// It describes the module to the store and is not consumed by TaskOtter or the
+// consumer repository, so it is never synced.
+func IsModuleMetadataPath(rel string) bool {
+	return NormalizeSlashes(rel) == consts.Metadata
+}
+
+// IsTestPath reports whether rel is a test file skipped during sync.
+func IsTestPath(rel string) bool {
+	rel = NormalizeSlashes(rel)
+
+	base := rel
+
+	if idx := strings.LastIndex(rel, consts.PathSepString); idx >= consts.IndexZero {
+		base = rel[idx+consts.IndexOne:]
+	}
+
+	return strings.Contains(base, "_test.")
+}
+
+// HasFolderPrefix reports whether path is folder or a child path of folder.
+func HasFolderPrefix(path, folder string) bool {
+	path = NormalizeSlashes(path)
+
+	folder = NormalizeSlashes(folder)
+
+	if path == folder {
+		return true
+	}
+
+	return strings.HasPrefix(path, folder+consts.PathSepString)
+}
+
 func validateTaskNameEmpty(name string) error {
 	if name != consts.Empty {
 		return nil
@@ -124,26 +246,6 @@ func containsDotDotComponent(normalized string) bool {
 func resolvesOutsideBase(rel string) bool {
 	return rel == consts.PathParent ||
 		strings.HasPrefix(rel, consts.PathParent+string(os.PathSeparator))
-}
-
-// ValidateTargetFolder resolves and validates a workspace-relative target folder.
-func ValidateTargetFolder(raw, workspace string) (string, error) {
-	trimmed, normalized, err := normalizeAndValidateTargetFolder(raw)
-	if err != nil {
-		return consts.Empty, fmt.Errorf(errNormalizeTargetFolder, err)
-	}
-
-	evalWorkspace, err := resolveEvalWorkspace(workspace)
-	if err != nil {
-		return consts.Empty, fmt.Errorf("resolve evaluation workspace: %w", err)
-	}
-
-	err = ensureSafeTargetFolder(evalWorkspace, normalized, trimmed)
-	if err != nil {
-		return consts.Empty, fmt.Errorf("ensure safe target folder: %w", err)
-	}
-
-	return normalized, nil
 }
 
 func normalizeAndValidateTargetFolder(raw string) (trimmedOut, normalizedOut string, err error) {
@@ -350,13 +452,6 @@ func resolveSymlinkComponent(evalWorkspace, current, raw string) (string, error)
 	return linkTarget, nil
 }
 
-// JoinRelative joins path parts under base using normalized forward slashes.
-func JoinRelative(base string, parts ...string) string {
-	all := append([]string{base}, parts...)
-
-	return NormalizeSlashes(filepath.ToSlash(filepath.Join(toOSParts(all)...)))
-}
-
 func toOSParts(parts []string) []string {
 	out := make([]string, consts.IndexZero, len(parts))
 
@@ -365,26 +460,6 @@ func toOSParts(parts []string) []string {
 	}
 
 	return out
-}
-
-// WorkspacePath joins workspace and a slash-separated relative path.
-func WorkspacePath(workspace, rel string) string {
-	return filepath.Join(workspace, filepath.FromSlash(rel))
-}
-
-// ValidateRelativePath checks that rel resolves to a path inside root.
-func ValidateRelativePath(root, rel string) (string, error) {
-	normalized, err := normalizeRelativePath(rel)
-	if err != nil {
-		return consts.Empty, fmt.Errorf("normalize relative path: %w", err)
-	}
-
-	err = validateInsideRoot(root, normalized, rel)
-	if err != nil {
-		return consts.Empty, fmt.Errorf("validate inside root: %w", err)
-	}
-
-	return normalized, nil
 }
 
 func validateInsideRoot(root, normalized, rel string) error {
@@ -471,36 +546,6 @@ func resolveValidatedRoot(root, rel string) (absRoot, safeRel string, err error)
 	return absRoot, safeRel, nil
 }
 
-// ReadRelativeFile reads rel under root after validating it stays inside root.
-func ReadRelativeFile(root, rel string) ([]byte, error) {
-	absRoot, safeRel, err := resolveValidatedRoot(root, rel)
-	if err != nil {
-		return nil, fmt.Errorf(errResolveValidatedRoot, err)
-	}
-
-	data, err := fs.ReadFile(os.DirFS(absRoot), safeRel)
-	if err != nil {
-		return nil, fmt.Errorf("read file %q: %w", rel, err)
-	}
-
-	return data, nil
-}
-
-// OpenRelativeFile opens rel under root after validating it stays inside root.
-func OpenRelativeFile(root, rel string) (*os.File, error) {
-	absRoot, safeRel, err := resolveValidatedRoot(root, rel)
-	if err != nil {
-		return nil, fmt.Errorf(errResolveValidatedRoot, err)
-	}
-
-	file, err := openDirFSFile(absRoot, safeRel, rel)
-	if err != nil {
-		return nil, fmt.Errorf("open validated file: %w", err)
-	}
-
-	return file, nil
-}
-
 // openDirFSFile opens safeRel under absRoot. safeRel has already been validated
 // to stay inside absRoot by resolveValidatedRoot.
 func openDirFSFile(absRoot, safeRel, rel string) (*os.File, error) {
@@ -511,49 +556,4 @@ func openDirFSFile(absRoot, safeRel, rel string) (*os.File, error) {
 	}
 
 	return file, nil
-}
-
-// IsDocPath reports whether rel is documentation copied when includes-doc is enabled.
-func IsDocPath(rel string) bool {
-	rel = NormalizeSlashes(rel)
-
-	if rel == consts.ReadmeMD {
-		return true
-	}
-
-	return strings.HasPrefix(rel, "docs"+consts.PathSepString) ||
-		strings.Contains(rel, consts.PathSepString+"docs"+consts.PathSepString)
-}
-
-// IsModuleMetadataPath reports whether rel is a store module's metadata.yml.
-// It describes the module to the store and is not consumed by TaskOtter or the
-// consumer repository, so it is never synced.
-func IsModuleMetadataPath(rel string) bool {
-	return NormalizeSlashes(rel) == consts.Metadata
-}
-
-// IsTestPath reports whether rel is a test file skipped during sync.
-func IsTestPath(rel string) bool {
-	rel = NormalizeSlashes(rel)
-
-	base := rel
-
-	if idx := strings.LastIndex(rel, consts.PathSepString); idx >= consts.IndexZero {
-		base = rel[idx+consts.IndexOne:]
-	}
-
-	return strings.Contains(base, "_test.")
-}
-
-// HasFolderPrefix reports whether path is folder or a child path of folder.
-func HasFolderPrefix(path, folder string) bool {
-	path = NormalizeSlashes(path)
-
-	folder = NormalizeSlashes(folder)
-
-	if path == folder {
-		return true
-	}
-
-	return strings.HasPrefix(path, folder+consts.PathSepString)
 }

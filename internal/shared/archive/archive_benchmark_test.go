@@ -25,6 +25,21 @@ const (
 		"tasks:\n  lint:\n    cmds:\n      - echo lint\n"
 )
 
+// BenchmarkExtractTarGz measures safe extraction of a store archive to disk.
+func BenchmarkExtractTarGz(b *testing.B) {
+	data := benchArchiveBytes(b)
+	destDir := b.TempDir()
+
+	for b.Loop() {
+		root, err := archive.ExtractTarGz(bytes.NewReader(data), destDir)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(root)
+	}
+}
+
 func benchTarEntry(writer *tar.Writer, name, body string) error {
 	header := &tar.Header{
 		Name: name,
@@ -105,19 +120,4 @@ func benchArchiveBytes(b *testing.B) []byte {
 	}
 
 	return buf.Bytes()
-}
-
-// BenchmarkExtractTarGz measures safe extraction of a store archive to disk.
-func BenchmarkExtractTarGz(b *testing.B) {
-	data := benchArchiveBytes(b)
-	destDir := b.TempDir()
-
-	for b.Loop() {
-		root, err := archive.ExtractTarGz(bytes.NewReader(data), destDir)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(root)
-	}
 }

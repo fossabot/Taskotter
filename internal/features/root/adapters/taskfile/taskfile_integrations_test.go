@@ -55,6 +55,315 @@ const (
 	foldedGoLoadCollapsed = `GetEnvironmentVariable('Path', 'User'); if (\$u)`
 )
 
+// TestRewriteIncludes verifies include taskfile paths are rewritten to destination paths.
+func TestRewriteIncludes(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.RewriteIncludes(
+		rewriteIncludesInput(),
+		map[string]string{destPnpm: destPnpm},
+		taskESLint,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRewriteIncludesOutput(t, string(out))
+}
+
+// TestRewriteIncludesNamespacedModule verifies slashed variant and unmapped includes rewrite correctly.
+func TestRewriteIncludesNamespacedModule(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.RewriteIncludes(
+		rewriteNamespacedInput(),
+		rewriteNamespacedSourceToDest(),
+		moduleESLintNodeVariant,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRewriteOutput(t, string(out), []string{
+		"taskfile: " + pathTaskfileYML,
+		"../../bun/Taskfile.yml",
+		"../../jq/Taskfile.yml",
+		pathUnknownTaskfile,
+	})
+}
+
+// TestRewriteIncludesFlatDestination verifies sibling deps use a single ../ after normalize.
+func TestRewriteIncludesFlatDestination(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.RewriteIncludes(
+		rewriteNamespacedInput(),
+		rewriteNamespacedSourceToDest(),
+		taskESLint,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRewriteOutput(t, string(out), []string{
+		"taskfile: node/Taskfile.yml",
+		"../bun/Taskfile.yml",
+		"../jq/Taskfile.yml",
+		pathUnknownTaskfile,
+	})
+}
+
+// TestRewriteIncludesPreservesFoldedBlock verifies folded cmd blocks stay byte-identical aside from the include path.
+func TestRewriteIncludesPreservesFoldedBlock(t *testing.T) {
+	t.Parallel()
+
+	input := rewriteIncludesFoldedInput()
+
+	assertRewriteIncludesEqual(t, &rewriteIncludesAssert{
+		input:    input,
+		want:     wantFoldedIncludeRewrite(input),
+		mapping:  map[string]string{destPnpm: destPnpm},
+		fromDest: taskESLint,
+	})
+}
+
+// TestRewriteIncludesNoopEmptyMap verifies an empty sourceToDest returns the original bytes.
+func TestRewriteIncludesNoopEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	input := rewriteIncludesFoldedInput()
+
+	assertRewriteIncludesEqual(t, &rewriteIncludesAssert{
+		input:    input,
+		want:     input,
+		mapping:  map[string]string{},
+		fromDest: taskESLint,
+	})
+}
+
+// TestRewriteIncludesNoopEmptyFromDest verifies an empty fromDest leaves mapped paths unchanged.
+func TestRewriteIncludesNoopEmptyFromDest(t *testing.T) {
+	t.Parallel()
+
+	input := rewriteIncludesInput()
+
+	assertRewriteIncludesEqual(t, &rewriteIncludesAssert{
+		input:    input,
+		want:     input,
+		mapping:  map[string]string{destPnpm: destPnpm},
+		fromDest: consts.Empty,
+	})
+}
+
+// TestUpdateRootTaskfileFromTemplate verifies a fresh template gains the expected includes and vars.
+func TestUpdateRootTaskfileFromTemplate(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), goOnlyRootInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertTemplateOutput(t, string(out))
+}
+
+// TestUpdateRootTaskfileFolderRelativeIncludes verifies includes are folder-relative when nested.
+func TestUpdateRootTaskfileFolderRelativeIncludes(t *testing.T) {
+	t.Parallel()
+
+	input := goOnlyRootInput()
+
+	input.RootTaskfileDir = targetFolderTaskfiles
+	input.ModuleTaskfiles = nil
+
+	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertFolderRelativeInclude(t, string(out))
+}
+
+// TestUpdateRootTaskfileUpdatesVersion verifies the root Taskfile version is updated to the current version.
+func TestUpdateRootTaskfileUpdatesVersion(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(rootWithCustomInclude(), goOnlyRootInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(out), wantVersion35) {
+		t.Fatalf(fmtWantVersion35, out)
+	}
+}
+
+// TestUpdateRootTaskfileForcesManagedIncludeVarsToRootRefs verifies include-level
+// literals for managed module keys are rewritten to {{.KEY}} root references.
+func TestUpdateRootTaskfileForcesManagedIncludeVarsToRootRefs(t *testing.T) {
+	t.Parallel()
+
+	input := goOnlyRootInput()
+
+	input.ManagedTasks = []string{consts.Go}
+	input.ModuleTaskfiles = map[string][]byte{consts.Go: goModuleTaskfile()}
+
+	out, err := taskfile.UpdateRootTaskfile(rootWithGoInclude(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertForcedIncludeRootRefs(t, string(out))
+}
+
+// TestUpdateRootTaskfile verifies managed includes are added while user includes are preserved.
+func TestUpdateRootTaskfile(t *testing.T) {
+	t.Parallel()
+
+	input := rootUpdateInput(&rootupd.RootUpdateInput{
+		Tasks:            []string{consts.Go, taskESLint},
+		TargetFolder:     targetFolderTaskfiles,
+		RootTaskfileDir:  consts.Empty,
+		DestByTask:       map[string]string{consts.Go: consts.Go, taskESLint: taskESLint},
+		ManagedTasks:     []string{},
+		ModuleTaskfiles:  nil,
+		GeneratedTasks:   nil,
+		ManagedRootTasks: nil,
+	})
+
+	out, err := taskfile.UpdateRootTaskfile(rootWithHelloTask(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertUpdateRootTaskfileOutput(t, string(out))
+}
+
+// TestUpdateRootTaskfileGeneratedTasksAndPromotedVars verifies generated tasks and
+// all module vars are promoted to root with include {{.KEY}} references.
+func TestUpdateRootTaskfileGeneratedTasksAndPromotedVars(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(promotedVarsRootFixture(), generatedTasksInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertGeneratedTasksAndPromotedVars(t, string(out))
+}
+
+// TestUpdateRootTaskfileCopiesFoldedVarsVerbatim verifies folded `>-` module
+// vars keep their original characters when promoted to the root Taskfile.
+func TestUpdateRootTaskfileCopiesFoldedVarsVerbatim(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), foldedGoLoadRootInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(out), foldedGoLoadValue()) {
+		t.Fatalf("expected folded GO_LOAD copy in root Taskfile:\n%s", out)
+	}
+
+	assertContainsNone(t, string(out), []string{
+		"TASKOTTER_RAW_VAR_GO_LOAD_Z",
+		foldedGoLoadCollapsed,
+	})
+}
+
+// TestUpdateRootTaskfileKeepsFoldedVarsOnResync verifies a second sync does not
+// fold existing root block scalars through the YAML encoder.
+func TestUpdateRootTaskfileKeepsFoldedVarsOnResync(t *testing.T) {
+	t.Parallel()
+
+	assertFoldedGoLoadPreserved(t, resyncFoldedGoLoad(t))
+}
+
+// TestUpdateRootTaskfilePromotesSingleModuleVars verifies a var present in only one
+// module is still promoted to root and referenced from that include.
+func TestUpdateRootTaskfilePromotesSingleModuleVars(t *testing.T) {
+	t.Parallel()
+
+	input := goOnlyRootInput()
+
+	input.ManagedTasks = []string{consts.Go}
+
+	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertGoModulePromotedVars(t, string(out))
+}
+
+// TestManagedIncludeDifferentPathConflict verifies a managed alias with a mismatched path errors.
+func TestManagedIncludeDifferentPathConflict(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(
+		rootWithESLintConflict(),
+		rootUpdateInput(&rootupd.RootUpdateInput{
+			Tasks:            []string{taskESLint},
+			TargetFolder:     targetFolderTaskfiles,
+			RootTaskfileDir:  consts.Empty,
+			DestByTask:       map[string]string{taskESLint: taskESLint},
+			ManagedTasks:     []string{taskESLint},
+			ModuleTaskfiles:  nil,
+			GeneratedTasks:   nil,
+			ManagedRootTasks: nil,
+		}),
+	)
+	iox.Discard(out)
+
+	if err == nil {
+		t.Fatal("expected conflict when alias path differs from managed path")
+	}
+}
+
+// TestRootTaskfileAliasConflict verifies a conflicting legacy alias path returns an error.
+func TestRootTaskfileAliasConflict(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(rootWithGoAliasConflict(), goOnlyRootInput())
+	iox.Discard(out)
+
+	if err == nil {
+		t.Fatal("expected alias conflict")
+	}
+}
+
+// TestScalarIncludeWrongPathConflict verifies a scalar include with the wrong path returns an error.
+func TestScalarIncludeWrongPathConflict(t *testing.T) {
+	t.Parallel()
+
+	out, err := taskfile.UpdateRootTaskfile(rootWithScalarGoConflict(), goOnlyRootInput())
+	iox.Discard(out)
+
+	if err == nil {
+		t.Fatal("expected scalar include path conflict")
+	}
+}
+
+// TestRewriteUsesRealStoreSnippet verifies rewriting works against a real store fixture Taskfile.
+func TestRewriteUsesRealStoreSnippet(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(storeESLintTaskfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := taskfile.RewriteIncludes(data, map[string]string{destPnpm: destPnpm}, taskESLint)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(out), wantPnpmRewrite) {
+		t.Fatalf("rewrite failed: %s", out)
+	}
+}
+
 func rewriteIncludesInput() []byte {
 	return []byte(`version: "3"
 includes:
@@ -186,64 +495,6 @@ func assertRewriteIncludesOutput(t *testing.T, text string) {
 	}
 }
 
-// TestRewriteIncludes verifies include taskfile paths are rewritten to destination paths.
-func TestRewriteIncludes(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.RewriteIncludes(
-		rewriteIncludesInput(),
-		map[string]string{destPnpm: destPnpm},
-		taskESLint,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertRewriteIncludesOutput(t, string(out))
-}
-
-// TestRewriteIncludesNamespacedModule verifies slashed variant and unmapped includes rewrite correctly.
-func TestRewriteIncludesNamespacedModule(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.RewriteIncludes(
-		rewriteNamespacedInput(),
-		rewriteNamespacedSourceToDest(),
-		moduleESLintNodeVariant,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertRewriteOutput(t, string(out), []string{
-		"taskfile: " + pathTaskfileYML,
-		"../../bun/Taskfile.yml",
-		"../../jq/Taskfile.yml",
-		pathUnknownTaskfile,
-	})
-}
-
-// TestRewriteIncludesFlatDestination verifies sibling deps use a single ../ after normalize.
-func TestRewriteIncludesFlatDestination(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.RewriteIncludes(
-		rewriteNamespacedInput(),
-		rewriteNamespacedSourceToDest(),
-		taskESLint,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertRewriteOutput(t, string(out), []string{
-		"taskfile: node/Taskfile.yml",
-		"../bun/Taskfile.yml",
-		"../jq/Taskfile.yml",
-		pathUnknownTaskfile,
-	})
-}
-
 func assertRewriteOutput(t *testing.T, text string, wants []string) {
 	t.Helper()
 
@@ -290,48 +541,6 @@ func assertRewriteIncludesEqual(t *testing.T, params *rewriteIncludesAssert) {
 	}
 }
 
-// TestRewriteIncludesPreservesFoldedBlock verifies folded cmd blocks stay byte-identical aside from the include path.
-func TestRewriteIncludesPreservesFoldedBlock(t *testing.T) {
-	t.Parallel()
-
-	input := rewriteIncludesFoldedInput()
-
-	assertRewriteIncludesEqual(t, &rewriteIncludesAssert{
-		input:    input,
-		want:     wantFoldedIncludeRewrite(input),
-		mapping:  map[string]string{destPnpm: destPnpm},
-		fromDest: taskESLint,
-	})
-}
-
-// TestRewriteIncludesNoopEmptyMap verifies an empty sourceToDest returns the original bytes.
-func TestRewriteIncludesNoopEmptyMap(t *testing.T) {
-	t.Parallel()
-
-	input := rewriteIncludesFoldedInput()
-
-	assertRewriteIncludesEqual(t, &rewriteIncludesAssert{
-		input:    input,
-		want:     input,
-		mapping:  map[string]string{},
-		fromDest: taskESLint,
-	})
-}
-
-// TestRewriteIncludesNoopEmptyFromDest verifies an empty fromDest leaves mapped paths unchanged.
-func TestRewriteIncludesNoopEmptyFromDest(t *testing.T) {
-	t.Parallel()
-
-	input := rewriteIncludesInput()
-
-	assertRewriteIncludesEqual(t, &rewriteIncludesAssert{
-		input:    input,
-		want:     input,
-		mapping:  map[string]string{destPnpm: destPnpm},
-		fromDest: consts.Empty,
-	})
-}
-
 func assertTemplateOutput(t *testing.T, text string) {
 	t.Helper()
 
@@ -341,35 +550,6 @@ func assertTemplateOutput(t *testing.T, text string) {
 		wantIncludeDirDot,
 	})
 	assertGoModulePromotedVars(t, text)
-}
-
-// TestUpdateRootTaskfileFromTemplate verifies a fresh template gains the expected includes and vars.
-func TestUpdateRootTaskfileFromTemplate(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), goOnlyRootInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertTemplateOutput(t, string(out))
-}
-
-// TestUpdateRootTaskfileFolderRelativeIncludes verifies includes are folder-relative when nested.
-func TestUpdateRootTaskfileFolderRelativeIncludes(t *testing.T) {
-	t.Parallel()
-
-	input := goOnlyRootInput()
-
-	input.RootTaskfileDir = targetFolderTaskfiles
-	input.ModuleTaskfiles = nil
-
-	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertFolderRelativeInclude(t, string(out))
 }
 
 func assertFolderRelativeInclude(t *testing.T, text string) {
@@ -383,38 +563,6 @@ func assertFolderRelativeInclude(t *testing.T, text string) {
 	if strings.Contains(text, pathTaskfilesGoYML) {
 		t.Fatalf("include should not repeat the target folder: %s", text)
 	}
-}
-
-// TestUpdateRootTaskfileUpdatesVersion verifies the root Taskfile version is updated to the current version.
-func TestUpdateRootTaskfileUpdatesVersion(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(rootWithCustomInclude(), goOnlyRootInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !strings.Contains(string(out), wantVersion35) {
-		t.Fatalf(fmtWantVersion35, out)
-	}
-}
-
-// TestUpdateRootTaskfileForcesManagedIncludeVarsToRootRefs verifies include-level
-// literals for managed module keys are rewritten to {{.KEY}} root references.
-func TestUpdateRootTaskfileForcesManagedIncludeVarsToRootRefs(t *testing.T) {
-	t.Parallel()
-
-	input := goOnlyRootInput()
-
-	input.ManagedTasks = []string{consts.Go}
-	input.ModuleTaskfiles = map[string][]byte{consts.Go: goModuleTaskfile()}
-
-	out, err := taskfile.UpdateRootTaskfile(rootWithGoInclude(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertForcedIncludeRootRefs(t, string(out))
 }
 
 func assertForcedIncludeRootRefs(t *testing.T, text string) {
@@ -436,29 +584,6 @@ func assertGoModulePromotedVars(t *testing.T, text string) {
 	})
 }
 
-// TestUpdateRootTaskfile verifies managed includes are added while user includes are preserved.
-func TestUpdateRootTaskfile(t *testing.T) {
-	t.Parallel()
-
-	input := rootUpdateInput(&rootupd.RootUpdateInput{
-		Tasks:            []string{consts.Go, taskESLint},
-		TargetFolder:     targetFolderTaskfiles,
-		RootTaskfileDir:  consts.Empty,
-		DestByTask:       map[string]string{consts.Go: consts.Go, taskESLint: taskESLint},
-		ManagedTasks:     []string{},
-		ModuleTaskfiles:  nil,
-		GeneratedTasks:   nil,
-		ManagedRootTasks: nil,
-	})
-
-	out, err := taskfile.UpdateRootTaskfile(rootWithHelloTask(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertUpdateRootTaskfileOutput(t, string(out))
-}
-
 func assertUpdateRootTaskfileOutput(t *testing.T, text string) {
 	t.Helper()
 
@@ -468,19 +593,6 @@ func assertUpdateRootTaskfileOutput(t *testing.T, text string) {
 		"custom/Taskfile.yml",
 		wantIncludeDirDot,
 	})
-}
-
-// TestUpdateRootTaskfileGeneratedTasksAndPromotedVars verifies generated tasks and
-// all module vars are promoted to root with include {{.KEY}} references.
-func TestUpdateRootTaskfileGeneratedTasksAndPromotedVars(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(promotedVarsRootFixture(), generatedTasksInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertGeneratedTasksAndPromotedVars(t, string(out))
 }
 
 func generatedTasksInput() *rootupd.RootUpdateInput {
@@ -515,34 +627,6 @@ func assertGeneratedTasksAndPromotedVars(t *testing.T, text string) {
 	})
 
 	assertContainsNone(t, text, []string{"echo user lint", "previously generated"})
-}
-
-// TestUpdateRootTaskfileCopiesFoldedVarsVerbatim verifies folded `>-` module
-// vars keep their original characters when promoted to the root Taskfile.
-func TestUpdateRootTaskfileCopiesFoldedVarsVerbatim(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), foldedGoLoadRootInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !strings.Contains(string(out), foldedGoLoadValue()) {
-		t.Fatalf("expected folded GO_LOAD copy in root Taskfile:\n%s", out)
-	}
-
-	assertContainsNone(t, string(out), []string{
-		"TASKOTTER_RAW_VAR_GO_LOAD_Z",
-		foldedGoLoadCollapsed,
-	})
-}
-
-// TestUpdateRootTaskfileKeepsFoldedVarsOnResync verifies a second sync does not
-// fold existing root block scalars through the YAML encoder.
-func TestUpdateRootTaskfileKeepsFoldedVarsOnResync(t *testing.T) {
-	t.Parallel()
-
-	assertFoldedGoLoadPreserved(t, resyncFoldedGoLoad(t))
 }
 
 func resyncFoldedGoLoad(t *testing.T) []byte {
@@ -658,89 +742,5 @@ vars:
   VERSION: latest
   CONFIG: ""
 `),
-	}
-}
-
-// TestUpdateRootTaskfilePromotesSingleModuleVars verifies a var present in only one
-// module is still promoted to root and referenced from that include.
-func TestUpdateRootTaskfilePromotesSingleModuleVars(t *testing.T) {
-	t.Parallel()
-
-	input := goOnlyRootInput()
-
-	input.ManagedTasks = []string{consts.Go}
-
-	out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertGoModulePromotedVars(t, string(out))
-}
-
-// TestManagedIncludeDifferentPathConflict verifies a managed alias with a mismatched path errors.
-func TestManagedIncludeDifferentPathConflict(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(
-		rootWithESLintConflict(),
-		rootUpdateInput(&rootupd.RootUpdateInput{
-			Tasks:            []string{taskESLint},
-			TargetFolder:     targetFolderTaskfiles,
-			RootTaskfileDir:  consts.Empty,
-			DestByTask:       map[string]string{taskESLint: taskESLint},
-			ManagedTasks:     []string{taskESLint},
-			ModuleTaskfiles:  nil,
-			GeneratedTasks:   nil,
-			ManagedRootTasks: nil,
-		}),
-	)
-	iox.Discard(out)
-
-	if err == nil {
-		t.Fatal("expected conflict when alias path differs from managed path")
-	}
-}
-
-// TestRootTaskfileAliasConflict verifies a conflicting legacy alias path returns an error.
-func TestRootTaskfileAliasConflict(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(rootWithGoAliasConflict(), goOnlyRootInput())
-	iox.Discard(out)
-
-	if err == nil {
-		t.Fatal("expected alias conflict")
-	}
-}
-
-// TestScalarIncludeWrongPathConflict verifies a scalar include with the wrong path returns an error.
-func TestScalarIncludeWrongPathConflict(t *testing.T) {
-	t.Parallel()
-
-	out, err := taskfile.UpdateRootTaskfile(rootWithScalarGoConflict(), goOnlyRootInput())
-	iox.Discard(out)
-
-	if err == nil {
-		t.Fatal("expected scalar include path conflict")
-	}
-}
-
-// TestRewriteUsesRealStoreSnippet verifies rewriting works against a real store fixture Taskfile.
-func TestRewriteUsesRealStoreSnippet(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile(storeESLintTaskfile)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := taskfile.RewriteIncludes(data, map[string]string{destPnpm: destPnpm}, taskESLint)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !strings.Contains(string(out), wantPnpmRewrite) {
-		t.Fatalf("rewrite failed: %s", out)
 	}
 }

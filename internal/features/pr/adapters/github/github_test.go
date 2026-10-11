@@ -26,30 +26,6 @@ const (
 	pathReposPulls = "/repos/owner/repo/pulls"
 )
 
-func newTestClient(t *testing.T, handler http.HandlerFunc) (client *Client, cleanup func()) {
-	t.Helper()
-
-	srv := httptest.NewServer(handler)
-
-	api, err := githubapi.NewClientWithHTTP(srv.URL+"/", srv.Client())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return &Client{fns: clientFns{
-		createPR:   makeCreatePR(api, testOwner, testRepoName),
-		findOpenPR: makeFindOpenPR(api, testOwner, testRepoName),
-		updateBody: makeUpdateBody(api, testOwner, testRepoName),
-	}}, srv.Close
-}
-
-func writeTestResponse(writer http.ResponseWriter, payload []byte) {
-	writeErr := iox.WriteFull(writer, payload)
-	if writeErr != nil {
-		return
-	}
-}
-
 // TestNewClientParsesRepository verifies the owner and repo name are parsed from the coordinate.
 func TestNewClientParsesRepository(t *testing.T) {
 	t.Parallel()
@@ -74,16 +50,6 @@ func TestNewClientRejectsInvalidRepository(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewClient() error = nil, want error")
 	}
-}
-
-func findOpenPRHandler(writer http.ResponseWriter, request *http.Request) {
-	if request.URL.Path != pathReposPulls {
-		writer.WriteHeader(http.StatusNotFound)
-
-		return
-	}
-
-	writeTestResponse(writer, []byte(`[{"number":7,"html_url":"https://example/pr/7"}]`))
 }
 
 // TestFindOpenPR verifies an open pull request is returned for the branch/base pair.
@@ -138,14 +104,6 @@ func TestFindOpenPRError(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("FindOpenPR() error = nil, want error")
-	}
-}
-
-func testCreatePRRequest() *domain.CreatePRRequest {
-	return &domain.CreatePRRequest{
-		Branch: testSyncBranch,
-		Base:   testMainBranch,
-		Body:   testPRBody,
 	}
 }
 
@@ -219,5 +177,47 @@ func TestUpdatePRBodyError(t *testing.T) {
 	err := client.UpdatePRBody(t.Context(), consts.IndexSeven, testPRBody)
 	if err == nil {
 		t.Fatal("UpdatePRBody() error = nil, want error")
+	}
+}
+
+func newTestClient(t *testing.T, handler http.HandlerFunc) (client *Client, cleanup func()) {
+	t.Helper()
+
+	srv := httptest.NewServer(handler)
+
+	api, err := githubapi.NewClientWithHTTP(srv.URL+"/", srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return &Client{fns: clientFns{
+		createPR:   makeCreatePR(api, testOwner, testRepoName),
+		findOpenPR: makeFindOpenPR(api, testOwner, testRepoName),
+		updateBody: makeUpdateBody(api, testOwner, testRepoName),
+	}}, srv.Close
+}
+
+func writeTestResponse(writer http.ResponseWriter, payload []byte) {
+	writeErr := iox.WriteFull(writer, payload)
+	if writeErr != nil {
+		return
+	}
+}
+
+func findOpenPRHandler(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Path != pathReposPulls {
+		writer.WriteHeader(http.StatusNotFound)
+
+		return
+	}
+
+	writeTestResponse(writer, []byte(`[{"number":7,"html_url":"https://example/pr/7"}]`))
+}
+
+func testCreatePRRequest() *domain.CreatePRRequest {
+	return &domain.CreatePRRequest{
+		Branch: testSyncBranch,
+		Base:   testMainBranch,
+		Body:   testPRBody,
 	}
 }

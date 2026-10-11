@@ -17,6 +17,27 @@ const (
 	packageManagerPNPM = "pnpm"
 )
 
+// Parse validates the YAML value of the js action input.
+func Parse(raw string) (*Settings, error) {
+	raw = strings.TrimSpace(raw)
+
+	if raw == consts.Empty {
+		return emptyJSConfig(), nil
+	}
+
+	yamlInput, err := parseJSYAML(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse js yaml: %w", err)
+	}
+
+	jsCfg, err := dispatchJSRuntime(&yamlInput)
+	if err != nil {
+		return nil, fmt.Errorf("dispatch js runtime: %w", err)
+	}
+
+	return jsCfg, nil
+}
+
 func jsRuntimeParsers() map[JSRuntime]func(*jsInput) (*Settings, error) {
 	return map[JSRuntime]func(*jsInput) (*Settings, error){
 		JSRuntimeBun:    parseJSBun,
@@ -94,27 +115,6 @@ func emptyJSConfig() *Settings {
 		Runtime:            consts.Empty,
 		NodePackageManager: consts.Empty,
 	}
-}
-
-// Parse validates the YAML value of the js action input.
-func Parse(raw string) (*Settings, error) {
-	raw = strings.TrimSpace(raw)
-
-	if raw == consts.Empty {
-		return emptyJSConfig(), nil
-	}
-
-	yamlInput, err := parseJSYAML(raw)
-	if err != nil {
-		return nil, fmt.Errorf("parse js yaml: %w", err)
-	}
-
-	jsCfg, err := dispatchJSRuntime(&yamlInput)
-	if err != nil {
-		return nil, fmt.Errorf("dispatch js runtime: %w", err)
-	}
-
-	return jsCfg, nil
 }
 
 func parseJSBun(yamlInput *jsInput) (*Settings, error) {

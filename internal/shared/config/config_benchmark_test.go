@@ -26,6 +26,24 @@ const (
 	benchMainRef      = "refs/heads/main"
 )
 
+// BenchmarkLoadFromEnv measures parsing, validating, and hashing the action inputs.
+func BenchmarkLoadFromEnv(b *testing.B) {
+	env := benchEnv(b.TempDir())
+
+	for key := range env {
+		b.Setenv(key, env[key])
+	}
+
+	for b.Loop() {
+		cfg, err := config.LoadFromEnv()
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(cfg)
+	}
+}
+
 func benchTaskList() string {
 	var out strings.Builder
 
@@ -51,23 +69,5 @@ func benchEnv(workspace string) map[string]string {
 		benchRepoKey:              benchRepository,
 		consts.GitHubRefEnv:       benchMainRef,
 		benchBaseRefKey:           consts.Empty,
-	}
-}
-
-// BenchmarkLoadFromEnv measures parsing, validating, and hashing the action inputs.
-func BenchmarkLoadFromEnv(b *testing.B) {
-	env := benchEnv(b.TempDir())
-
-	for key := range env {
-		b.Setenv(key, env[key])
-	}
-
-	for b.Loop() {
-		cfg, err := config.LoadFromEnv()
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(cfg)
 	}
 }

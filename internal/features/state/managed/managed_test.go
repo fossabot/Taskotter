@@ -51,6 +51,19 @@ func TestFileUnmarshalYAMLRoundTrip(t *testing.T) {
 	assertValidFile(t, &file)
 }
 
+// TestDecodeFileYAMLRejectsInvalidYAML covers decode failure and non-document unwrap.
+func TestDecodeFileYAMLRejectsInvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	var file File
+
+	assertFails(t, DecodeFileYAML([]byte(":\t"), &file))
+
+	if yamlDocumentContent(nil) != nil {
+		t.Fatal("nil document")
+	}
+}
+
 func assertFails(t *testing.T, err error) {
 	t.Helper()
 
@@ -143,17 +156,4 @@ func runFileOKCases(t *testing.T, cases []fileYAMLCase) {
 func unmarshalFileOK(t *testing.T, payload string, file *File) {
 	t.Helper()
 	assertNoErr(t, DecodeFileYAML([]byte(payload), file))
-}
-
-// TestDecodeFileYAMLRejectsInvalidYAML covers decode failure and non-document unwrap.
-func TestDecodeFileYAMLRejectsInvalidYAML(t *testing.T) {
-	t.Parallel()
-
-	var file File
-
-	assertFails(t, DecodeFileYAML([]byte(":\t"), &file))
-
-	if yamlDocumentContent(nil) != nil {
-		t.Fatal("nil document")
-	}
 }

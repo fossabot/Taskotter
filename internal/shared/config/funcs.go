@@ -34,6 +34,16 @@ func LoadFromEnv() (*Config, error) {
 	return buildConfig(&raw, &parsed), nil
 }
 
+// LockFilePath returns the workspace-relative path to the managed lock file.
+func LockFilePath(cfg *Config) string {
+	return pathutil.JoinRelative(cfg.TargetFolder, ".taskotter-lock.yml")
+}
+
+// MetadataPath returns the workspace-relative path to TaskOtter metadata.
+func MetadataPath(cfg *Config) string {
+	return pathutil.JoinRelative(cfg.TargetFolder, consts.MetadataPath)
+}
+
 // actionInput reads a GitHub Actions input from the environment.
 // Docker container actions expose INPUT_<NAME> with hyphens preserved
 // (for example INPUT_GITHUB-TOKEN). Other runners may use underscores
@@ -502,16 +512,6 @@ func validateTaskLine(name string) error {
 	}
 
 	return nil
-}
-
-// LockFilePath returns the workspace-relative path to the managed lock file.
-func LockFilePath(cfg *Config) string {
-	return pathutil.JoinRelative(cfg.TargetFolder, ".taskotter-lock.yml")
-}
-
-// MetadataPath returns the workspace-relative path to TaskOtter metadata.
-func MetadataPath(cfg *Config) string {
-	return pathutil.JoinRelative(cfg.TargetFolder, consts.MetadataPath)
 }
 
 // Error implements the error interface, returning the field-prefixed validation message.

@@ -149,6 +149,19 @@ func TestRedact(t *testing.T) {
 	}
 }
 
+// TestLoggerErrNilWriteFunc verifies the behavior covered by this test.
+func TestLoggerErrNilWriteFunc(t *testing.T) {
+	t.Parallel()
+
+	logger := &logging.Logger{}
+
+	if logger.Err() != nil {
+		t.Fatalf("Err = %v", logger.Err())
+	}
+
+	logger.Noticef("ignored")
+}
+
 func capturedLogOutput() string {
 	var buf bytes.Buffer
 
@@ -163,17 +176,4 @@ func capturedLogOutput() string {
 	})
 
 	return buf.String()
-}
-
-// TestLoggerErrNilWriteFunc verifies the behavior covered by this test.
-func TestLoggerErrNilWriteFunc(t *testing.T) {
-	t.Parallel()
-
-	logger := &logging.Logger{}
-
-	if logger.Err() != nil {
-		t.Fatalf("Err = %v", logger.Err())
-	}
-
-	logger.Noticef("ignored")
 }

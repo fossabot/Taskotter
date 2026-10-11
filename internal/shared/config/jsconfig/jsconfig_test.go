@@ -52,19 +52,6 @@ func TestParseValidSettings(t *testing.T) {
 	}
 }
 
-func assertValidSettings(t *testing.T, testCase *parseCase) {
-	t.Helper()
-
-	got, err := Parse(testCase.raw)
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
-	}
-
-	if got.Runtime != testCase.wantRuntime || got.NodePackageManager != testCase.wantManager {
-		t.Fatalf("Parse() = %#v", got)
-	}
-}
-
 // TestParseValidationErrors verifies the behavior covered by this test.
 //
 //nolint:funlen,maintidx // The table cases are intentionally written in full for parser coverage.
@@ -103,6 +90,19 @@ func TestParseValidationErrors(t *testing.T) {
 
 			assertValidationError(t, tc.raw, tc.wantField)
 		})
+	}
+}
+
+func assertValidSettings(t *testing.T, testCase *parseCase) {
+	t.Helper()
+
+	got, err := Parse(testCase.raw)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if got.Runtime != testCase.wantRuntime || got.NodePackageManager != testCase.wantManager {
+		t.Fatalf("Parse() = %#v", got)
 	}
 }
 

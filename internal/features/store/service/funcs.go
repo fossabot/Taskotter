@@ -31,16 +31,6 @@ func LocalSnapshot(root string, ref *domain.RefInfo) (*domain.Snapshot, error) {
 	}), nil
 }
 
-func newLocalSnapshot(args *localSnapshotArgs) *domain.Snapshot {
-	return &domain.Snapshot{
-		RootDir: args.root,
-		Catalog: args.catalog,
-		Deps:    args.deps,
-		Ref:     *args.ref,
-		Cleanup: nil,
-	}
-}
-
 // LoadCatalogAndDeps loads the module catalog and dependency map from a store root.
 func LoadCatalogAndDeps(
 	root string,
@@ -56,6 +46,16 @@ func LoadCatalogAndDeps(
 	}
 
 	return catalog, deps, nil
+}
+
+func newLocalSnapshot(args *localSnapshotArgs) *domain.Snapshot {
+	return &domain.Snapshot{
+		RootDir: args.root,
+		Catalog: args.catalog,
+		Deps:    args.deps,
+		Ref:     *args.ref,
+		Cleanup: nil,
+	}
 }
 
 func loadCatalog(root string) (map[string]struct{}, error) {

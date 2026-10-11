@@ -24,6 +24,22 @@ import (
 	"github.com/task-otter/Taskotter/internal/shared/logging"
 )
 
+// NewOrchestrator documents the behavior of this declaration.
+func NewOrchestrator(deps *Deps) *Orchestrator {
+	run := Orchestrator(func(ctx context.Context, cfg *config.Config) (*rundomain.Result, error) {
+		wireDefaults(deps)
+
+		result, err := execPipeline(ctx, deps, cfg)
+		if err != nil {
+			return nil, fmt.Errorf(errFmtRun, err)
+		}
+
+		return result, nil
+	})
+
+	return &run
+}
+
 func wireSyncHooks(deps *Deps) {
 	if deps.PrepareSyncInput == nil {
 		deps.PrepareSyncInput = inputpkg.Build
@@ -103,22 +119,6 @@ func sourceModulesOf(resolutions []resolvesvc.Resolution) []string {
 	}
 
 	return requestedSources
-}
-
-// NewOrchestrator documents the behavior of this declaration.
-func NewOrchestrator(deps *Deps) *Orchestrator {
-	run := Orchestrator(func(ctx context.Context, cfg *config.Config) (*rundomain.Result, error) {
-		wireDefaults(deps)
-
-		result, err := execPipeline(ctx, deps, cfg)
-		if err != nil {
-			return nil, fmt.Errorf(errFmtRun, err)
-		}
-
-		return result, nil
-	})
-
-	return &run
 }
 
 // Run executes the configured synchronization orchestration.

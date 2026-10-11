@@ -37,6 +37,53 @@ func ApplyPlan(plan *domain.Plan, syncInput *domain.SyncInput) error {
 	return nil
 }
 
+// SetCopyFileToHookForTest installs a copy hook on plan for tests.
+func SetCopyFileToHookForTest(plan *domain.Plan, hook func(string, *domain.FileEntry) error) {
+	plan.CopyFileTo = hook
+}
+
+// CopyFile copies rel under root to dst with the given mode.
+func CopyFile(args *copyFileArgs) error {
+	data, err := readRelativeFile(args.root, args.rel)
+	if err != nil {
+		return fmt.Errorf("read source file: %w", err)
+	}
+
+	err = writeCopiedFile(args.dst, data, args.mode)
+	if err != nil {
+		return fmt.Errorf("write copied file: %w", err)
+	}
+
+	return nil
+}
+
+// BuildPlan computes the sync diff and generated artifacts for syncInput.
+func BuildPlan(syncInput *domain.SyncInput) (*domain.Plan, error) {
+	prev, err := loadPreviousState(syncInput.Config.Workspace, syncInput.Config)
+	if err != nil {
+		return nil, fmt.Errorf("load previous state: %w", err)
+	}
+
+	plan, err := buildPlanFromState(syncInput, &prev)
+	if err != nil {
+		return nil, fmt.Errorf("build plan from state: %w", err)
+	}
+
+	plan.Input = syncInput
+
+	return plan, nil
+}
+
+// CollectModuleFiles scans a module source directory and returns syncable file entries.
+func CollectModuleFiles(opts *CollectOptions) (map[string]domain.FileEntry, error) {
+	contents, err := scanModuleFiles(collectOptionsFrom(opts))
+	if err != nil {
+		return nil, fmt.Errorf("scan module files: %w", err)
+	}
+
+	return contents, nil
+}
+
 func applyPlanWithCleanup(plan *domain.Plan, syncInput *domain.SyncInput) (err error) {
 	session, err := startApplySession(plan, syncInput)
 	if err != nil {
@@ -1165,11 +1212,6 @@ func relativePathExists(workspace, rel string) bool {
 	return err == nil
 }
 
-// SetCopyFileToHookForTest installs a copy hook on plan for tests.
-func SetCopyFileToHookForTest(plan *domain.Plan, hook func(string, *domain.FileEntry) error) {
-	plan.CopyFileTo = hook
-}
-
 func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 
@@ -1272,21 +1314,6 @@ func copyFileTo(path string, entry *domain.FileEntry) error {
 	err := writeFileAtomic(path, entry.Data, entry.Mode)
 	if err != nil {
 		return fmt.Errorf("write file %q: %w", path, err)
-	}
-
-	return nil
-}
-
-// CopyFile copies rel under root to dst with the given mode.
-func CopyFile(args *copyFileArgs) error {
-	data, err := readRelativeFile(args.root, args.rel)
-	if err != nil {
-		return fmt.Errorf("read source file: %w", err)
-	}
-
-	err = writeCopiedFile(args.dst, data, args.mode)
-	if err != nil {
-		return fmt.Errorf("write copied file: %w", err)
 	}
 
 	return nil
@@ -1619,33 +1646,6 @@ func isCurrentOrLegacyMetadataPath(rel, currentMetadataPath string) bool {
 func isTaskOtterMetadataPath(rel string) bool {
 	return filepath.Base(rel) == storeMetadataFileName &&
 		filepath.Base(filepath.Dir(rel)) == legacyMetadataDirName
-}
-
-// BuildPlan computes the sync diff and generated artifacts for syncInput.
-func BuildPlan(syncInput *domain.SyncInput) (*domain.Plan, error) {
-	prev, err := loadPreviousState(syncInput.Config.Workspace, syncInput.Config)
-	if err != nil {
-		return nil, fmt.Errorf("load previous state: %w", err)
-	}
-
-	plan, err := buildPlanFromState(syncInput, &prev)
-	if err != nil {
-		return nil, fmt.Errorf("build plan from state: %w", err)
-	}
-
-	plan.Input = syncInput
-
-	return plan, nil
-}
-
-// CollectModuleFiles scans a module source directory and returns syncable file entries.
-func CollectModuleFiles(opts *CollectOptions) (map[string]domain.FileEntry, error) {
-	contents, err := scanModuleFiles(collectOptionsFrom(opts))
-	if err != nil {
-		return nil, fmt.Errorf("scan module files: %w", err)
-	}
-
-	return contents, nil
 }
 
 func accumulateModulePlan(args *modulePlanArgs) ([]managedFile, error) {

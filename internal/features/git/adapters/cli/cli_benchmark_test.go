@@ -13,6 +13,45 @@ import (
 	"github.com/task-otter/Taskotter/internal/shared/consts"
 )
 
+// BenchmarkGitDefaultBranch measures performance.
+func BenchmarkGitDefaultBranch(b *testing.B) {
+	dir := createBenchmarkRepo(b)
+	client := cli.NewClient(dir)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := client.DefaultBranch(b.Context())
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkGitHasUnrelatedChanges measures performance.
+func BenchmarkGitHasUnrelatedChanges(b *testing.B) {
+	dir := createBenchmarkRepo(b)
+	client := cli.NewClient(dir)
+	allowed := map[string]struct{}{consts.ReadmeMD: {}}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := client.HasUnrelatedChanges(b.Context(), allowed)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkGitClient measures performance.
+func BenchmarkGitClient(b *testing.B) {
+	b.Run("DefaultBranch", BenchmarkGitDefaultBranch)
+	b.Run("HasUnrelatedChanges", BenchmarkGitHasUnrelatedChanges)
+}
+
 func createBenchmarkRepo(b *testing.B) string {
 	b.Helper()
 
@@ -98,43 +137,4 @@ func benchRunGit(b *testing.B, dir string, args ...string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-}
-
-// BenchmarkGitDefaultBranch measures performance.
-func BenchmarkGitDefaultBranch(b *testing.B) {
-	dir := createBenchmarkRepo(b)
-	client := cli.NewClient(dir)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := client.DefaultBranch(b.Context())
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkGitHasUnrelatedChanges measures performance.
-func BenchmarkGitHasUnrelatedChanges(b *testing.B) {
-	dir := createBenchmarkRepo(b)
-	client := cli.NewClient(dir)
-	allowed := map[string]struct{}{consts.ReadmeMD: {}}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := client.HasUnrelatedChanges(b.Context(), allowed)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkGitClient measures performance.
-func BenchmarkGitClient(b *testing.B) {
-	b.Run("DefaultBranch", BenchmarkGitDefaultBranch)
-	b.Run("HasUnrelatedChanges", BenchmarkGitHasUnrelatedChanges)
 }

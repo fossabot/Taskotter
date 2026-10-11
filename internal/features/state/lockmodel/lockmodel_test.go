@@ -104,6 +104,42 @@ func TestOrderedRequestedUnmarshalRejectsSequence(t *testing.T) {
 	assertFails(t, DecodeOrderedRequestedYAML([]byte("- a\n"), &requested))
 }
 
+// TestDecodeHelpersCoverErrorPaths covers decode YAML failure paths.
+func TestDecodeHelpersCoverErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	var lock LockFile
+
+	assertFails(t, DecodeLockFileYAML([]byte(invalidYAMLColonTab), &lock))
+
+	var record ModuleRecord
+
+	assertFails(t, DecodeModuleRecordYAML([]byte(invalidYAMLColonTab), &record))
+
+	var requested OrderedRequested
+
+	assertFails(t, DecodeOrderedRequestedYAML([]byte(invalidYAMLColonTab), &requested))
+}
+
+// TestDecodeHelpersCoverDocumentPaths covers successful decode and nil unwrap.
+func TestDecodeHelpersCoverDocumentPaths(t *testing.T) {
+	t.Parallel()
+
+	var requested OrderedRequested
+
+	assertNoErr(
+		t,
+		DecodeOrderedRequestedYAML(
+			[]byte("go:\n  source_module: go\n  destination_module: go\n"),
+			&requested,
+		),
+	)
+
+	if yamlDocumentContent(nil) != nil {
+		t.Fatal("nil document")
+	}
+}
+
 func assertFails(t *testing.T, err error) {
 	t.Helper()
 
@@ -350,41 +386,5 @@ func sampleSource() LockSource {
 		SourceRef:        "refs/heads/main",
 		ResolvedCommit:   "abc",
 		DefaultBranch:    branchMain,
-	}
-}
-
-// TestDecodeHelpersCoverErrorPaths covers decode YAML failure paths.
-func TestDecodeHelpersCoverErrorPaths(t *testing.T) {
-	t.Parallel()
-
-	var lock LockFile
-
-	assertFails(t, DecodeLockFileYAML([]byte(invalidYAMLColonTab), &lock))
-
-	var record ModuleRecord
-
-	assertFails(t, DecodeModuleRecordYAML([]byte(invalidYAMLColonTab), &record))
-
-	var requested OrderedRequested
-
-	assertFails(t, DecodeOrderedRequestedYAML([]byte(invalidYAMLColonTab), &requested))
-}
-
-// TestDecodeHelpersCoverDocumentPaths covers successful decode and nil unwrap.
-func TestDecodeHelpersCoverDocumentPaths(t *testing.T) {
-	t.Parallel()
-
-	var requested OrderedRequested
-
-	assertNoErr(
-		t,
-		DecodeOrderedRequestedYAML(
-			[]byte("go:\n  source_module: go\n  destination_module: go\n"),
-			&requested,
-		),
-	)
-
-	if yamlDocumentContent(nil) != nil {
-		t.Fatal("nil document")
 	}
 }

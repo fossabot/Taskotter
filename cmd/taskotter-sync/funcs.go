@@ -19,6 +19,19 @@ import (
 	"github.com/task-otter/Taskotter/internal/shared/logging"
 )
 
+// WireOrchestrator builds an Orchestrator with concrete adapters from configuration.
+func WireOrchestrator(ctx context.Context, cfg *config.Config) (*orchestrator.Orchestrator, error) {
+	client := gitcli.NewClient(cfg.Workspace)
+	deps := newWiredDeps(ctx, cfg, client)
+
+	err := wirePRClient(ctx, cfg, deps)
+	if err != nil {
+		return nil, fmt.Errorf("wire PR client: %w", err)
+	}
+
+	return orchestrator.NewOrchestrator(deps), nil
+}
+
 func main() {
 	exitFunc(run())
 }
@@ -129,19 +142,6 @@ func handleUnchanged(cfg *config.Config, result *rundomain.Result) int {
 	}
 
 	return exitSuccess
-}
-
-// WireOrchestrator builds an Orchestrator with concrete adapters from configuration.
-func WireOrchestrator(ctx context.Context, cfg *config.Config) (*orchestrator.Orchestrator, error) {
-	client := gitcli.NewClient(cfg.Workspace)
-	deps := newWiredDeps(ctx, cfg, client)
-
-	err := wirePRClient(ctx, cfg, deps)
-	if err != nil {
-		return nil, fmt.Errorf("wire PR client: %w", err)
-	}
-
-	return orchestrator.NewOrchestrator(deps), nil
 }
 
 func newWiredDeps(

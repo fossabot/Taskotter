@@ -25,6 +25,87 @@ const (
 	benchVarsTaskfile  = "version: \"3\"\nvars:\n  MOD_VERSION: \"\"\n  SHARED_FLAG: "
 )
 
+// BenchmarkRewriteIncludes measures rewriting module include paths in a Taskfile.
+func BenchmarkRewriteIncludes(b *testing.B) {
+	content := benchModuleTaskfile()
+	mapping := benchNameMap(benchIncludeCount)
+	fromDest := benchModuleName(consts.IndexZero)
+
+	for b.Loop() {
+		out, err := taskfile.RewriteIncludes(content, mapping, fromDest)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(out)
+	}
+}
+
+// BenchmarkUpdateRootTaskfileFromTemplate measures generating a root Taskfile from scratch.
+func BenchmarkUpdateRootTaskfileFromTemplate(b *testing.B) {
+	input := benchRootUpdateInput()
+
+	for b.Loop() {
+		out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(out)
+	}
+}
+
+// BenchmarkUpdateRootTaskfileExisting measures merging managed includes into an existing root.
+func BenchmarkUpdateRootTaskfileExisting(b *testing.B) {
+	input := benchRootUpdateInput()
+	existing := benchExistingRoot(b)
+
+	for b.Loop() {
+		out, err := taskfile.UpdateRootTaskfile(existing, input)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		iox.Discard(out)
+	}
+}
+
+// BenchmarkUpdateRootTaskfile measures performance.
+func BenchmarkUpdateRootTaskfile(b *testing.B) {
+	template := taskfile.NewRootTemplate()
+	input := goOnlyRootInput()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := taskfile.UpdateRootTaskfile(template, input)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkRewriteIncludesSpans measures performance.
+func BenchmarkRewriteIncludesSpans(b *testing.B) {
+	input := []byte(rewriteIncludesSpanInput)
+	mapping := map[string]string{
+		pathPNPMTaskfile:               "../pnpm/Taskfile.yml",
+		"../../../eslint/Taskfile.yml": "../eslint/Taskfile.yml",
+		"../../prettier/Taskfile.yml":  "../prettier/Taskfile.yml",
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := taskfile.RewriteIncludes(input, mapping, moduleESLintNodePNPM)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func benchModuleName(idx int) string {
 	return benchModulePrefix + strconv.Itoa(idx)
 }
@@ -105,85 +186,4 @@ func benchExistingRoot(b *testing.B) []byte {
 	}
 
 	return out
-}
-
-// BenchmarkRewriteIncludes measures rewriting module include paths in a Taskfile.
-func BenchmarkRewriteIncludes(b *testing.B) {
-	content := benchModuleTaskfile()
-	mapping := benchNameMap(benchIncludeCount)
-	fromDest := benchModuleName(consts.IndexZero)
-
-	for b.Loop() {
-		out, err := taskfile.RewriteIncludes(content, mapping, fromDest)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(out)
-	}
-}
-
-// BenchmarkUpdateRootTaskfileFromTemplate measures generating a root Taskfile from scratch.
-func BenchmarkUpdateRootTaskfileFromTemplate(b *testing.B) {
-	input := benchRootUpdateInput()
-
-	for b.Loop() {
-		out, err := taskfile.UpdateRootTaskfile(taskfile.NewRootTemplate(), input)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(out)
-	}
-}
-
-// BenchmarkUpdateRootTaskfileExisting measures merging managed includes into an existing root.
-func BenchmarkUpdateRootTaskfileExisting(b *testing.B) {
-	input := benchRootUpdateInput()
-	existing := benchExistingRoot(b)
-
-	for b.Loop() {
-		out, err := taskfile.UpdateRootTaskfile(existing, input)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		iox.Discard(out)
-	}
-}
-
-// BenchmarkUpdateRootTaskfile measures performance.
-func BenchmarkUpdateRootTaskfile(b *testing.B) {
-	template := taskfile.NewRootTemplate()
-	input := goOnlyRootInput()
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := taskfile.UpdateRootTaskfile(template, input)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkRewriteIncludesSpans measures performance.
-func BenchmarkRewriteIncludesSpans(b *testing.B) {
-	input := []byte(rewriteIncludesSpanInput)
-	mapping := map[string]string{
-		pathPNPMTaskfile:               "../pnpm/Taskfile.yml",
-		"../../../eslint/Taskfile.yml": "../eslint/Taskfile.yml",
-		"../../prettier/Taskfile.yml":  "../prettier/Taskfile.yml",
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := taskfile.RewriteIncludes(input, mapping, moduleESLintNodePNPM)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
 }

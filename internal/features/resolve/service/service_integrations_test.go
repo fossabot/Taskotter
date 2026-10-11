@@ -92,16 +92,6 @@ const (
 	suffixBun       = "/bun"
 )
 
-func deps() map[string][]string {
-	return map[string][]string{
-		srcESLintPnpm: {destPnpm},
-		destPnpm:      {modNodejs, modNix},
-		modNodejs:     {modNix},
-		modNix:        {},
-		"go":          {},
-	}
-}
-
 // TestResolveTransitive verifies the expected behavior.
 func TestResolveTransitive(t *testing.T) {
 	t.Parallel()
@@ -196,47 +186,6 @@ func TestRequestedModuleMissingFromDependencyFile(t *testing.T) {
 	}
 }
 
-func eslintNormalizeCases() map[string]string {
-	return map[string]string{
-		srcESLintPnpm:       taskESLint,
-		"eslint/node/npm":   taskESLint,
-		"eslint/node/yarn":  taskESLint,
-		srcESLintBun:        taskESLint,
-		"prettier/node/npm": taskPrettier,
-	}
-}
-
-func toolNormalizeCases() map[string]string {
-	return map[string]string{
-		destPnpm:  destPnpm,
-		destNpm:   destNpm,
-		destYarn:  destYarn,
-		destBun:   destBun,
-		consts.Go: consts.Go,
-	}
-}
-
-func assertNormalize(t *testing.T, source, want string) {
-	t.Helper()
-
-	got, err := service.Normalize(source)
-	if err != nil {
-		t.Fatalf("Normalize(%q) error = %v", source, err)
-	}
-
-	if got != want {
-		t.Fatalf("Normalize(%q) = %q, want %q", source, got, want)
-	}
-}
-
-func assertNormalizeCases(t *testing.T, cases map[string]string) {
-	t.Helper()
-
-	for source := range cases {
-		assertNormalize(t, source, cases[source])
-	}
-}
-
 // TestNormalizeExamples verifies the expected behavior.
 func TestNormalizeExamples(t *testing.T) {
 	t.Parallel()
@@ -316,17 +265,6 @@ func TestBuildDestinationMapSortsSources(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("SortedSources() = %#v, want %#v", got, want)
 		}
-	}
-}
-
-func nodeConfigurationErrorCases() []nodeConfigErrorCase {
-	return []nodeConfigErrorCase{
-		{
-			name:    "requires package manager",
-			catalog: []string{srcESLintBun},
-			pm:      consts.Empty,
-			wantMsg: "requires js configuration",
-		},
 	}
 }
 
@@ -484,6 +422,106 @@ func TestResolveNonNodeTask(t *testing.T) {
 	}
 }
 
+// TestBuildSourceModule verifies source module names build correctly and reject invalid combinations.
+func TestBuildSourceModule(t *testing.T) {
+	t.Parallel()
+
+	assertBuildSourceModule(t, &buildSourceModuleCase{
+		task: taskESLint, pkgMgr: config.PMPnpm, want: srcESLintPnpm,
+	})
+	assertBuildSourceModule(t, &buildSourceModuleCase{
+		task:   taskESLint,
+		pkgMgr: config.JSRuntimeBun,
+		want:   srcESLintBun,
+	})
+	assertBuildSourceModuleError(t, &buildSourceModuleCase{
+		task:   taskESLint,
+		pkgMgr: config.PackageManager(pkgDeno),
+		want:   consts.Empty,
+	})
+}
+
+// TestIsNodeToolVariant verifies node tool variant module names are correctly identified.
+func TestIsNodeToolVariant(t *testing.T) {
+	t.Parallel()
+
+	cases := nodeToolVariantCases()
+
+	for i := range cases {
+		assertNodeToolVariant(t, &cases[i])
+	}
+}
+
+// TestStripOneSuffix verifies a single matching suffix is stripped from module names.
+func TestStripOneSuffix(t *testing.T) {
+	t.Parallel()
+
+	assertStripOneSuffixCases(t, stripOneSuffixPrimaryCases())
+	assertStripOneSuffixCases(t, stripOneSuffixEdgeCases())
+}
+
+func deps() map[string][]string {
+	return map[string][]string{
+		srcESLintPnpm: {destPnpm},
+		destPnpm:      {modNodejs, modNix},
+		modNodejs:     {modNix},
+		modNix:        {},
+		"go":          {},
+	}
+}
+
+func eslintNormalizeCases() map[string]string {
+	return map[string]string{
+		srcESLintPnpm:       taskESLint,
+		"eslint/node/npm":   taskESLint,
+		"eslint/node/yarn":  taskESLint,
+		srcESLintBun:        taskESLint,
+		"prettier/node/npm": taskPrettier,
+	}
+}
+
+func toolNormalizeCases() map[string]string {
+	return map[string]string{
+		destPnpm:  destPnpm,
+		destNpm:   destNpm,
+		destYarn:  destYarn,
+		destBun:   destBun,
+		consts.Go: consts.Go,
+	}
+}
+
+func assertNormalize(t *testing.T, source, want string) {
+	t.Helper()
+
+	got, err := service.Normalize(source)
+	if err != nil {
+		t.Fatalf("Normalize(%q) error = %v", source, err)
+	}
+
+	if got != want {
+		t.Fatalf("Normalize(%q) = %q, want %q", source, got, want)
+	}
+}
+
+func assertNormalizeCases(t *testing.T, cases map[string]string) {
+	t.Helper()
+
+	for source := range cases {
+		assertNormalize(t, source, cases[source])
+	}
+}
+
+func nodeConfigurationErrorCases() []nodeConfigErrorCase {
+	return []nodeConfigErrorCase{
+		{
+			name:    "requires package manager",
+			catalog: []string{srcESLintBun},
+			pm:      consts.Empty,
+			wantMsg: "requires js configuration",
+		},
+	}
+}
+
 func assertHasCloseMatches(t *testing.T, err error) {
 	t.Helper()
 
@@ -628,25 +666,6 @@ func assertBuildSourceModuleError(t *testing.T, testCase *buildSourceModuleCase)
 	}
 }
 
-// TestBuildSourceModule verifies source module names build correctly and reject invalid combinations.
-func TestBuildSourceModule(t *testing.T) {
-	t.Parallel()
-
-	assertBuildSourceModule(t, &buildSourceModuleCase{
-		task: taskESLint, pkgMgr: config.PMPnpm, want: srcESLintPnpm,
-	})
-	assertBuildSourceModule(t, &buildSourceModuleCase{
-		task:   taskESLint,
-		pkgMgr: config.JSRuntimeBun,
-		want:   srcESLintBun,
-	})
-	assertBuildSourceModuleError(t, &buildSourceModuleCase{
-		task:   taskESLint,
-		pkgMgr: config.PackageManager(pkgDeno),
-		want:   consts.Empty,
-	})
-}
-
 func nodeToolVariantCases() []nodeToolVariantCase {
 	return []nodeToolVariantCase{
 		{moduleName: srcESLintPnpm, logicalTask: taskESLint, expected: true},
@@ -672,17 +691,6 @@ func assertNodeToolVariant(t *testing.T, testCase *nodeToolVariantCase) {
 			got,
 			testCase.expected,
 		)
-	}
-}
-
-// TestIsNodeToolVariant verifies node tool variant module names are correctly identified.
-func TestIsNodeToolVariant(t *testing.T) {
-	t.Parallel()
-
-	cases := nodeToolVariantCases()
-
-	for i := range cases {
-		assertNodeToolVariant(t, &cases[i])
 	}
 }
 
@@ -717,12 +725,4 @@ func assertStripOneSuffixCases(t *testing.T, cases []stripOneSuffixCase) {
 	for i := range cases {
 		assertStripOneSuffix(t, &cases[i])
 	}
-}
-
-// TestStripOneSuffix verifies a single matching suffix is stripped from module names.
-func TestStripOneSuffix(t *testing.T) {
-	t.Parallel()
-
-	assertStripOneSuffixCases(t, stripOneSuffixPrimaryCases())
-	assertStripOneSuffixCases(t, stripOneSuffixEdgeCases())
 }

@@ -48,27 +48,6 @@ func TestLoadMetadataReadsFile(t *testing.T) {
 	assertMetadataFixture(t, meta)
 }
 
-func writeMetadataFixture(t *testing.T, root, rel string) {
-	t.Helper()
-
-	data := []byte(
-		"target_folder: taskfiles\nlock_file: .taskotter-lock.yml\nconfiguration_hash: abc\n",
-	)
-
-	err := os.WriteFile(filepath.Join(root, rel), data, consts.FilePerm644)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func assertMetadataFixture(t *testing.T, meta *Metadata) {
-	t.Helper()
-
-	if meta.TargetFolder != testTargetFolder || meta.LockFile != ".taskotter-lock.yml" {
-		t.Fatalf("metadata = %#v", meta)
-	}
-}
-
 // TestLoadMetadataCorruptFails verifies the behavior covered by this test.
 func TestLoadMetadataCorruptFails(t *testing.T) {
 	t.Parallel()
@@ -108,6 +87,50 @@ func TestLoadLockReadsFile(t *testing.T) {
 	assertLockFixture(t, lock, &want)
 }
 
+// TestLoadLockCorruptFails verifies the behavior covered by this test.
+func TestLoadLockCorruptFails(t *testing.T) {
+	t.Parallel()
+
+	assertCorruptLoadFails(t, &corruptLoadCase{
+		rel:  testLockFile,
+		want: errExpectedCorruptLock,
+		load: loadCorruptLock,
+	})
+}
+
+// TestLoadLockMissingFileFails verifies the behavior covered by this test.
+func TestLoadLockMissingFileFails(t *testing.T) {
+	t.Parallel()
+
+	lock, err := LoadLock(t.TempDir(), testMissingFile)
+	iox.Discard(lock)
+
+	if err == nil {
+		t.Fatal("expected missing lock error")
+	}
+}
+
+func writeMetadataFixture(t *testing.T, root, rel string) {
+	t.Helper()
+
+	data := []byte(
+		"target_folder: taskfiles\nlock_file: .taskotter-lock.yml\nconfiguration_hash: abc\n",
+	)
+
+	err := os.WriteFile(filepath.Join(root, rel), data, consts.FilePerm644)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertMetadataFixture(t *testing.T, meta *Metadata) {
+	t.Helper()
+
+	if meta.TargetFolder != testTargetFolder || meta.LockFile != ".taskotter-lock.yml" {
+		t.Fatalf("metadata = %#v", meta)
+	}
+}
+
 func writeLockFixture(t *testing.T, root, rel string) lockmodel.LockFile {
 	t.Helper()
 
@@ -142,17 +165,6 @@ func assertLockFixture(t *testing.T, got, want *lockmodel.LockFile) {
 	}
 }
 
-// TestLoadLockCorruptFails verifies the behavior covered by this test.
-func TestLoadLockCorruptFails(t *testing.T) {
-	t.Parallel()
-
-	assertCorruptLoadFails(t, &corruptLoadCase{
-		rel:  testLockFile,
-		want: errExpectedCorruptLock,
-		load: loadCorruptLock,
-	})
-}
-
 func loadCorruptMetadata(root, rel string) error {
 	meta, err := LoadMetadata(root, rel)
 	iox.Discard(meta)
@@ -180,17 +192,5 @@ func assertCorruptLoadFails(t *testing.T, testCase *corruptLoadCase) {
 	err = testCase.load(root, testCase.rel)
 	if err == nil {
 		t.Fatal(testCase.want)
-	}
-}
-
-// TestLoadLockMissingFileFails verifies the behavior covered by this test.
-func TestLoadLockMissingFileFails(t *testing.T) {
-	t.Parallel()
-
-	lock, err := LoadLock(t.TempDir(), testMissingFile)
-	iox.Discard(lock)
-
-	if err == nil {
-		t.Fatal("expected missing lock error")
 	}
 }

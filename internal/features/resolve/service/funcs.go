@@ -33,20 +33,6 @@ func (e *MissingDependencyError) Error() string {
 	return fmt.Sprintf("module %q depends on missing module %q", e.Module, e.Dependency)
 }
 
-func stringsJoinArrow(parts []string) string {
-	return strings.Join(parts, " -> ")
-}
-
-func markVisited(state *visitState, module string) bool {
-	if _, ok := state.needed[module]; ok {
-		return true
-	}
-
-	state.needed[module] = struct{}{}
-
-	return false
-}
-
 // ResolveTransitive returns dependency modules required by requested, excluding requested modules themselves.
 func ResolveTransitive(requested []string, deps map[string][]string) ([]string, error) {
 	state := &visitState{deps: deps, needed: make(map[string]struct{})}
@@ -59,6 +45,165 @@ func ResolveTransitive(requested []string, deps map[string][]string) ([]string, 
 	}
 
 	return transitiveDependencies(requested, state.needed), nil
+}
+
+// Normalize strips package-manager and version-manager suffixes from a source module name.
+func Normalize(source string) (string, error) {
+	current := source
+
+	for {
+		next, changed := StripOneSuffix(current)
+
+		if !changed {
+			break
+		}
+
+		current = next
+	}
+
+	if current == "" {
+		return "", fmt.Errorf("%w for %q", errEmptyNormalizedName, source)
+	}
+
+	return current, nil
+}
+
+// BuildDestinationMap normalizes each source module and rejects destination collisions.
+func BuildDestinationMap(sources []string) (map[string]string, error) {
+	destToSource := make(map[string]string, len(sources))
+	result := make(map[string]string, len(sources))
+
+	for i := range sources {
+		err := recordDestination(sources[i], destToSource, result)
+		if err != nil {
+			return nil, fmt.Errorf("record destination for %q: %w", sources[i], err)
+		}
+	}
+
+	return result, nil
+}
+
+// SortedSources returns map keys sorted lexicographically.
+func SortedSources(m map[string]string) []string {
+	out := make([]string, consts.IndexZero, len(m))
+
+	for source := range m {
+		out = append(out, source)
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// ResolveAll resolves each task against the store catalog.
+func ResolveAll(input *ResolveAllInput) ([]Resolution, error) {
+	out := make([]Resolution, consts.IndexZero, len(input.Tasks))
+
+	for idx := range input.Tasks {
+		task := input.Tasks[idx]
+
+		res, err := Resolve(&ResolveInput{
+			Task:           task,
+			Catalog:        input.Catalog,
+			PackageManager: input.PackageManager,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve task %q: %w", task, err)
+		}
+
+		out = append(out, res)
+	}
+
+	return out, nil
+}
+
+// Resolve maps one logical task to a store source module.
+func Resolve(input *ResolveInput) (Resolution, error) {
+	taskCtx := taskContext{
+		catalog:        input.Catalog,
+		packageManager: input.PackageManager,
+	}
+
+	res, err := resolveWithTaskContext(input.Task, &taskCtx)
+	if err != nil {
+		return Resolution{}, fmt.Errorf("resolve task: %w", err)
+	}
+
+	return res, nil
+}
+
+// Levenshtein calculates the string distance similarity score between left and right.
+func Levenshtein(left, right string) int {
+	return levenshteinDistance(left, right)
+}
+
+// IsNodeToolVariant reports whether moduleName is a Node variant of logicalTask.
+func IsNodeToolVariant(moduleName, logicalTask string) bool {
+	prefix := logicalTask + "/"
+
+	if len(moduleName) <= len(prefix) {
+		return false
+	}
+
+	if moduleName[:len(prefix)] != prefix {
+		return false
+	}
+
+	suffix := strings.TrimPrefix(moduleName[len(prefix):], "/")
+
+	return slices.Contains(nodeToolSuffixes(), suffix)
+}
+
+// BuildSourceModule constructs the store module name for a logical task and JS configuration.
+func BuildSourceModule(task string, packageManager pkgMgr) (string, error) {
+	switch packageManager {
+	case config.JSRuntimeBun:
+		return path.Join(task, packageManager), nil
+	case config.PMNPM, config.PMYarn, config.PMPnpm:
+		return path.Join(task, "node", packageManager), nil
+	default:
+		return consts.Empty, fmt.Errorf(fmtWrapQuoted, errInvalidPackageManager, packageManager)
+	}
+}
+
+// StripOneSuffix removes one known suffix from the end of name.
+func StripOneSuffix(name string) (string, bool) {
+	suffixes := stripSuffixes()
+
+	for i := range suffixes {
+		suffix := suffixes[i]
+
+		if !hasSuffixLongerThan(name, suffix) {
+			continue
+		}
+
+		return name[:len(name)-len(suffix)], true
+	}
+
+	return name, false
+}
+
+func stringsJoinArrow(parts []string) string {
+	return strings.Join(parts, " -> ")
+}
+
+// Error implements the error interface, returning the destination collision message.
+func (e *CollisionError) Error() string {
+	return fmt.Sprintf(
+		`Destination collision: %q and %q both normalize to destination module %q.`,
+		e.SourceA, e.SourceB, e.Destination,
+	)
+}
+
+func markVisited(state *visitState, module string) bool {
+	if _, ok := state.needed[module]; ok {
+		return true
+	}
+
+	state.needed[module] = struct{}{}
+
+	return false
 }
 
 func visitModule(module string, stack []string, state *visitState) error {
@@ -174,50 +319,6 @@ func transitiveDependencies(requested []string, needed map[string]struct{}) []st
 	return dependencies
 }
 
-// Error implements the error interface, returning the destination collision message.
-func (e *CollisionError) Error() string {
-	return fmt.Sprintf(
-		`Destination collision: %q and %q both normalize to destination module %q.`,
-		e.SourceA, e.SourceB, e.Destination,
-	)
-}
-
-// Normalize strips package-manager and version-manager suffixes from a source module name.
-func Normalize(source string) (string, error) {
-	current := source
-
-	for {
-		next, changed := StripOneSuffix(current)
-
-		if !changed {
-			break
-		}
-
-		current = next
-	}
-
-	if current == "" {
-		return "", fmt.Errorf("%w for %q", errEmptyNormalizedName, source)
-	}
-
-	return current, nil
-}
-
-// BuildDestinationMap normalizes each source module and rejects destination collisions.
-func BuildDestinationMap(sources []string) (map[string]string, error) {
-	destToSource := make(map[string]string, len(sources))
-	result := make(map[string]string, len(sources))
-
-	for i := range sources {
-		err := recordDestination(sources[i], destToSource, result)
-		if err != nil {
-			return nil, fmt.Errorf("record destination for %q: %w", sources[i], err)
-		}
-	}
-
-	return result, nil
-}
-
 func recordDestination(source string, destToSource, result map[string]string) error {
 	dest, err := Normalize(source)
 	if err != nil {
@@ -232,56 +333,6 @@ func recordDestination(source string, destToSource, result map[string]string) er
 	result[source] = dest
 
 	return nil
-}
-
-// SortedSources returns map keys sorted lexicographically.
-func SortedSources(m map[string]string) []string {
-	out := make([]string, consts.IndexZero, len(m))
-
-	for source := range m {
-		out = append(out, source)
-	}
-
-	slices.Sort(out)
-
-	return out
-}
-
-// ResolveAll resolves each task against the store catalog.
-func ResolveAll(input *ResolveAllInput) ([]Resolution, error) {
-	out := make([]Resolution, consts.IndexZero, len(input.Tasks))
-
-	for idx := range input.Tasks {
-		task := input.Tasks[idx]
-
-		res, err := Resolve(&ResolveInput{
-			Task:           task,
-			Catalog:        input.Catalog,
-			PackageManager: input.PackageManager,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("resolve task %q: %w", task, err)
-		}
-
-		out = append(out, res)
-	}
-
-	return out, nil
-}
-
-// Resolve maps one logical task to a store source module.
-func Resolve(input *ResolveInput) (Resolution, error) {
-	taskCtx := taskContext{
-		catalog:        input.Catalog,
-		packageManager: input.PackageManager,
-	}
-
-	res, err := resolveWithTaskContext(input.Task, &taskCtx)
-	if err != nil {
-		return Resolution{}, fmt.Errorf("resolve task: %w", err)
-	}
-
-	return res, nil
 }
 
 func resolveWithTaskContext(task string, taskCtx *taskContext) (Resolution, error) {
@@ -447,6 +498,22 @@ func topNames(scores []scoredCandidate, limit int) []string {
 	return out
 }
 
+func (state *dpState) computeRow(row int) {
+	state.curr[consts.IndexZero] = row
+
+	for col := consts.IndexOne; col <= len(state.right); col++ {
+		cost := consts.IndexOne
+
+		if state.left[row-consts.IndexOne] == state.right[col-consts.IndexOne] {
+			cost = consts.IndexZero
+		}
+
+		state.curr[col] = minInt3(state.curr[col-1]+1, state.prev[col]+1, state.prev[col-1]+cost)
+	}
+
+	state.prev, state.curr = state.curr, state.prev
+}
+
 func similarity(left, right string) int {
 	if left == right {
 		return scoreExactMatch
@@ -456,11 +523,6 @@ func similarity(left, right string) int {
 		return scorePrefixMatchBase + min(len(left), len(right))
 	}
 
-	return levenshteinDistance(left, right)
-}
-
-// Levenshtein calculates the string distance similarity score between left and right.
-func Levenshtein(left, right string) int {
 	return levenshteinDistance(left, right)
 }
 
@@ -501,22 +563,6 @@ func editDistance(left, right string) int {
 	return state.prev[rightLen]
 }
 
-func (state *dpState) computeRow(row int) {
-	state.curr[consts.IndexZero] = row
-
-	for col := consts.IndexOne; col <= len(state.right); col++ {
-		cost := consts.IndexOne
-
-		if state.left[row-consts.IndexOne] == state.right[col-consts.IndexOne] {
-			cost = consts.IndexZero
-		}
-
-		state.curr[col] = minInt3(state.curr[col-1]+1, state.prev[col]+1, state.prev[col-1]+cost)
-	}
-
-	state.prev, state.curr = state.curr, state.prev
-}
-
 func minInt3(first, second, third int) int {
 	return min(first, min(second, third))
 }
@@ -535,52 +581,6 @@ func stripSuffixes() []string {
 		"/node/pnpm",
 		"/bun",
 	}
-}
-
-// IsNodeToolVariant reports whether moduleName is a Node variant of logicalTask.
-func IsNodeToolVariant(moduleName, logicalTask string) bool {
-	prefix := logicalTask + "/"
-
-	if len(moduleName) <= len(prefix) {
-		return false
-	}
-
-	if moduleName[:len(prefix)] != prefix {
-		return false
-	}
-
-	suffix := strings.TrimPrefix(moduleName[len(prefix):], "/")
-
-	return slices.Contains(nodeToolSuffixes(), suffix)
-}
-
-// BuildSourceModule constructs the store module name for a logical task and JS configuration.
-func BuildSourceModule(task string, packageManager pkgMgr) (string, error) {
-	switch packageManager {
-	case config.JSRuntimeBun:
-		return path.Join(task, packageManager), nil
-	case config.PMNPM, config.PMYarn, config.PMPnpm:
-		return path.Join(task, "node", packageManager), nil
-	default:
-		return consts.Empty, fmt.Errorf(fmtWrapQuoted, errInvalidPackageManager, packageManager)
-	}
-}
-
-// StripOneSuffix removes one known suffix from the end of name.
-func StripOneSuffix(name string) (string, bool) {
-	suffixes := stripSuffixes()
-
-	for i := range suffixes {
-		suffix := suffixes[i]
-
-		if !hasSuffixLongerThan(name, suffix) {
-			continue
-		}
-
-		return name[:len(name)-len(suffix)], true
-	}
-
-	return name, false
 }
 
 func hasSuffixLongerThan(name, suffix string) bool {

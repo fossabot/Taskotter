@@ -134,8 +134,22 @@ type (
 	}
 )
 
-func newTestSnapshotAdapter(snapshot *storedomain.Snapshot) testSnapshotAdapter {
-	return testSnapshotAdapter{snapshot: snapshot}
+// TestApplyPlanWritesFiles verifies the expected behavior.
+func TestApplyPlanWritesFiles(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	cfg, syncInput, plan := setupPlan(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+
+	err := runApplyPlan(t, plan, &syncInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertFileExists(t, filepath.Join(workspace, config.DefaultTargetFolder, testGoTaskfilePath))
+	assertFileExists(t, filepath.Join(workspace, config.MetadataPath(cfg)))
 }
 
 func (adapter testSnapshotAdapter) DefaultBranch() string {
@@ -216,6 +230,398 @@ const (
 
 //nolint:decorder // Keep this injected failure beside the integration fixtures.
 var errSimulatedPromoteFailure = errors.New("simulated promote failure")
+
+// TestApplyPlanMigratesLegacyMetadataPath verifies the expected behavior.
+func TestApplyPlanMigratesLegacyMetadataPath(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeLegacyMetadataFixture(t, workspace)
+
+	cfg, syncInput, plan := setupPlan(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+
+	err := runApplyPlan(t, plan, &syncInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertMetadataMigrated(t, workspace, cfg)
+}
+
+// TestApplyPlanSkipsRootTaskfileWhenDisabled verifies the expected behavior.
+func TestApplyPlanSkipsRootTaskfileWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	runApplyPlanSkipsRootTest(t, t.TempDir(), "this is intentionally not valid Taskfile YAML: [")
+}
+
+// TestApplyPlanPreservesExecutableMode verifies the expected behavior.
+func TestApplyPlanPreservesExecutableMode(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	makeSetupScriptExecutableForTest(t)
+
+	syncInput, plan := setupPlanInput(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+
+	err := runApplyPlan(t, plan, &syncInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertExecutableBit(
+		t,
+		filepath.Join(workspace, config.DefaultTargetFolder, consts.Go, testRelGoSetupSh),
+	)
+}
+
+// TestApplyPlanPromoteBeforeDelete verifies the expected behavior.
+func TestApplyPlanPromoteBeforeDelete(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	obsolete := writeObsoleteManagedFile(t, workspace)
+
+	syncInput, plan := setupPlanInput(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+
+	var promoted int
+
+	withCopyFileHook(&copyHookInput{
+		t:    t,
+		plan: plan,
+		hook: failFirstPromoteHook(&promoted),
+		run:  assertPromoteFails(t, plan, &syncInput),
+	})
+
+	assertFileExists(t, obsolete)
+}
+
+// TestApplyPlanWriteOrder verifies the expected behavior.
+func TestApplyPlanWriteOrder(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	syncInput, plan := setupPlanInput(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+
+	order := recordWriteOrder(&writeOrderInput{
+		t: t, workspace: workspace, plan: plan, syncInput: &syncInput,
+	})
+
+	lockIdx := indexOfSuffix(order, testLockFileName)
+	metaIdx := indexOfSuffix(order, testMetadataFileName)
+	moduleIdx := indexOfContains(order, config.DefaultTargetFolder+"/"+consts.Go+"/")
+
+	if lockIdx < moduleIdx || metaIdx < lockIdx {
+		t.Fatalf("expected modules before lock before metadata, got %v", order)
+	}
+}
+
+// TestBuildPlanCorruptLockFails verifies the expected behavior.
+func TestBuildPlanCorruptLockFails(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeRootTaskfile(t, workspace)
+	writeCorruptLock(t, workspace)
+
+	cfg := testConfig(workspace, mutateGoWithDocs)
+	snap := fixtureStore(t)
+
+	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: snap})
+
+	expectBuildPlanError(t, &si, errExpectedCorruptLock)
+}
+
+// TestBuildPlanCorruptMetadataFails verifies the expected behavior.
+func TestBuildPlanCorruptMetadataFails(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeRootTaskfile(t, workspace)
+	writeTaskotterMetadata(&metadataWriteInput{
+		t:            t,
+		workspace:    workspace,
+		targetFolder: config.DefaultTargetFolder,
+		meta:         []byte(testInvalidYAML),
+	})
+
+	cfg := testConfig(workspace, mutateGoWithDocs)
+	snap := fixtureStore(t)
+
+	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: snap})
+
+	expectBuildPlanError(t, &si, errExpectedCorruptMetadata)
+}
+
+// TestMetadataOnlyChangeMarksChanged verifies the expected behavior.
+func TestMetadataOnlyChangeMarksChanged(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	cfg, syncInput, plan := setupPlan(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocsHashA},
+	)
+
+	err := runApplyPlan(t, plan, &syncInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.ConfigurationHash = "hash-b"
+
+	plan2 := replan(t, workspace, cfg)
+
+	if !plan2.Changed {
+		t.Fatal("expected metadata-only configuration hash change to mark plan changed")
+	}
+}
+
+// TestSHAOnlyLockChangeNotChanged verifies the expected behavior.
+func TestSHAOnlyLockChangeNotChanged(t *testing.T) {
+	t.Parallel()
+
+	plan2 := applyPlanAndRebuildSHA(t, t.TempDir())
+
+	if plan2.Changed {
+		t.Fatalf(
+			"expected no file changes when only resolved commit differs: added=%v updated=%v removed=%v",
+			plan2.Added,
+			plan2.Updated,
+			plan2.Removed,
+		)
+	}
+}
+
+// TestConfigurationChangeMarksUpdated verifies the expected behavior.
+func TestConfigurationChangeMarksUpdated(t *testing.T) {
+	t.Parallel()
+
+	workspace, cfg := applyGoWithDocsPlan(t)
+	assertIncludesDocToggleRemovesDocs(t, workspace, cfg)
+}
+
+// TestPackageManagerSwitchSameDestination verifies the expected behavior.
+func TestPackageManagerSwitchSameDestination(t *testing.T) {
+	t.Parallel()
+
+	mods := []string{testModuleESLintNodePNPM, testModuleESLintNodeNPM, consts.EslintBun}
+
+	for i := range mods {
+		t.Run(mods[i], func(t *testing.T) {
+			t.Parallel()
+
+			assertNormalizesToEslint(t, mods[i])
+		})
+	}
+}
+
+// TestPrefixSafetyPreservesUnrelatedPaths verifies the expected behavior.
+func TestPrefixSafetyPreservesUnrelatedPaths(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	extra := filepath.Join(workspace, "taskfiles-extra", "foo.txt")
+	writeFileWithDir(t, extra, []byte("stay"))
+	writeTaskGoManagedLock(t, workspace)
+
+	cfg, syncInput, plan := setupPlan(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+	discardCfg(cfg)
+
+	assertApplyPlanPreservesPath(&preservePathInput{
+		t: t, plan: plan, syncInput: &syncInput, path: extra,
+	})
+}
+
+// TestTargetFolderMigration verifies the expected behavior.
+func TestTargetFolderMigration(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	fixture := writeOldTargetFixture(t, workspace)
+
+	cfg, syncInput, plan := setupPlan(
+		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
+	)
+	discardCfg(cfg)
+
+	err := runApplyPlan(t, plan, &syncInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertMigrationResult(&migrationAssertInput{
+		t: t, workspace: workspace, oldManaged: fixture.oldManaged, oldUser: fixture.oldUser,
+	})
+}
+
+// TestCollectModuleFilesSkipsTestsAndDocs verifies the expected behavior.
+func TestCollectModuleFilesSkipsTestsAndDocs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeModuleFixtureFiles(t, dir)
+	assertCollectedWithDocs(t, dir)
+	assertCollectedWithoutDocs(t, dir)
+}
+
+// TestLogicalRootDocsMergedFromParent verifies the expected behavior.
+func TestLogicalRootDocsMergedFromParent(t *testing.T) {
+	t.Parallel()
+
+	withDocs := buildNestedDocsPlan(t, true)
+	assertParentReadmeCollected(t, withDocs)
+
+	withoutDocs := buildNestedDocsPlan(t, false)
+	assertNoReadmeManaged(t, withoutDocs)
+
+	collision := buildNestedDocsPlanWithLeafReadme(t)
+	assertParentReadmeCollected(t, collision)
+}
+
+// TestStoreMetadataAcceptsCurrentSchema verifies the expected behavior.
+func TestStoreMetadataAcceptsCurrentSchema(t *testing.T) {
+	t.Parallel()
+
+	err := buildPlanWithLeafMetadata(t, currentSchemaMetadata)
+	if err != nil {
+		t.Fatalf("BuildPlan with current schema: %v", err)
+	}
+}
+
+// TestStoreMetadataRejectsUnknownSchema verifies the expected behavior.
+func TestStoreMetadataRejectsUnknownSchema(t *testing.T) {
+	t.Parallel()
+
+	err := buildPlanWithLeafMetadata(t, legacySchemaMetadata)
+	if err == nil {
+		t.Fatal("expected unsupported metadata schema error")
+	}
+
+	if !strings.Contains(err.Error(), "unsupported metadata.yml schema") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestBuildPlanInitialSync verifies the expected behavior.
+func TestBuildPlanInitialSync(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeRootTaskfile(t, workspace)
+
+	cfg := testConfig(workspace, mutateEslintGoPnpm)
+	plan := replan(t, workspace, cfg)
+
+	if !plan.Changed {
+		t.Fatal(errExpectedChangesInitial)
+	}
+
+	assertGeneratedRootTasks(t, plan)
+}
+
+// TestBuildPlanCreatesRootTaskfile verifies the expected behavior.
+func TestBuildPlanCreatesRootTaskfile(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	snap := fixtureStore(t)
+	cfg := testConfig(workspace, mutateGoWithDocs)
+
+	resolutions, depSources := resolveModsForTest(&moduleTestInput{t: t, cfg: cfg, snap: snap})
+	plan := buildPlanFrom(&buildPlanFromInput{
+		t: t, cfg: cfg, snap: snap, resolutions: resolutions, depSources: depSources,
+	})
+
+	if !plan.Changed {
+		t.Fatal(errExpectedChangesInitial)
+	}
+
+	if !containsRootTaskfile(plan.Added) {
+		t.Fatalf("expected root Taskfile.yml in added files, got added=%v", plan.Added)
+	}
+}
+
+// TestUnmanagedDestinationConflict verifies the expected behavior.
+func TestUnmanagedDestinationConflict(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeRootTaskfile(t, workspace)
+	writeUnmanagedFile(t, workspace)
+
+	snap := fixtureStore(t)
+	cfg := testConfig(workspace, mutateEslintPnpm)
+	si := buildEslintSyncInput(t, cfg, snap)
+
+	expectBuildPlanError(t, &si, "expected unmanaged destination conflict")
+}
+
+// TestIncludesDocFalseSkipsReadme verifies the expected behavior.
+func TestIncludesDocFalseSkipsReadme(t *testing.T) {
+	t.Parallel()
+
+	assertNoReadmeManaged(t, buildEslintPlan(t, mutateEslintPnpmNoDocs))
+}
+
+// TestIncludesDocTrueIncludesEslintReadme verifies the expected behavior.
+func TestIncludesDocTrueIncludesEslintReadme(t *testing.T) {
+	t.Parallel()
+
+	assertEslintReadmeManaged(t, buildEslintPlan(t, mutateEslintPnpm))
+}
+
+// TestIncludesDocFalseSkipsFixtureDocs verifies the expected behavior.
+func TestIncludesDocFalseSkipsFixtureDocs(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeRootTaskfile(t, workspace)
+
+	cfg := testConfig(workspace, func(cfg *config.Config) {
+		cfg.Tasks = []string{consts.Go}
+		cfg.IncludesDoc = false
+	})
+	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: fixtureStore(t)})
+
+	plan, err := planpkg.BuildPlan(&si)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertNoDocPathsManaged(t, plan)
+}
+
+// TestIncludesDocTrueIncludesFixtureDocs verifies the expected behavior.
+func TestIncludesDocTrueIncludesFixtureDocs(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	writeRootTaskfile(t, workspace)
+
+	cfg := testConfig(workspace, mutateGoWithDocs)
+	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: fixtureStore(t)})
+
+	plan, err := planpkg.BuildPlan(&si)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertDocPathsManaged(t, plan)
+}
+
+func newTestSnapshotAdapter(snapshot *storedomain.Snapshot) testSnapshotAdapter {
+	return testSnapshotAdapter{snapshot: snapshot}
+}
 
 func buildPlanFromSyncInput(t *testing.T, syncInput *plandomain.SyncInput) *plandomain.Plan {
 	t.Helper()
@@ -353,43 +759,6 @@ func assertMetadataMigrated(t *testing.T, workspace string, cfg *config.Config) 
 	}
 }
 
-// TestApplyPlanWritesFiles verifies the expected behavior.
-func TestApplyPlanWritesFiles(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	cfg, syncInput, plan := setupPlan(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-
-	err := runApplyPlan(t, plan, &syncInput)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertFileExists(t, filepath.Join(workspace, config.DefaultTargetFolder, testGoTaskfilePath))
-	assertFileExists(t, filepath.Join(workspace, config.MetadataPath(cfg)))
-}
-
-// TestApplyPlanMigratesLegacyMetadataPath verifies the expected behavior.
-func TestApplyPlanMigratesLegacyMetadataPath(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeLegacyMetadataFixture(t, workspace)
-
-	cfg, syncInput, plan := setupPlan(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-
-	err := runApplyPlan(t, plan, &syncInput)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertMetadataMigrated(t, workspace, cfg)
-}
-
 func assertRootTaskfileNotDiffed(t *testing.T, plan *plandomain.Plan) {
 	t.Helper()
 
@@ -448,13 +817,6 @@ func runApplyPlanSkipsRootTest(t *testing.T, workspace, rootContent string) {
 	})
 }
 
-// TestApplyPlanSkipsRootTaskfileWhenDisabled verifies the expected behavior.
-func TestApplyPlanSkipsRootTaskfileWhenDisabled(t *testing.T) {
-	t.Parallel()
-
-	runApplyPlanSkipsRootTest(t, t.TempDir(), "this is intentionally not valid Taskfile YAML: [")
-}
-
 func storeSetupScriptPath() string {
 	return filepath.Join(
 		consts.PathParent,
@@ -509,28 +871,6 @@ func assertExecutableBit(t *testing.T, path string) {
 	if info.Mode().Perm()&consts.FilePerm111 == consts.IndexZero {
 		t.Fatalf("expected executable bit, got %o", info.Mode().Perm())
 	}
-}
-
-// TestApplyPlanPreservesExecutableMode verifies the expected behavior.
-func TestApplyPlanPreservesExecutableMode(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	makeSetupScriptExecutableForTest(t)
-
-	syncInput, plan := setupPlanInput(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-
-	err := runApplyPlan(t, plan, &syncInput)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertExecutableBit(
-		t,
-		filepath.Join(workspace, config.DefaultTargetFolder, consts.Go, testRelGoSetupSh),
-	)
 }
 
 func writeObsoleteFile(t *testing.T, workspace string) string {
@@ -600,29 +940,6 @@ func assertPromoteFails(
 	}
 }
 
-// TestApplyPlanPromoteBeforeDelete verifies the expected behavior.
-func TestApplyPlanPromoteBeforeDelete(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	obsolete := writeObsoleteManagedFile(t, workspace)
-
-	syncInput, plan := setupPlanInput(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-
-	var promoted int
-
-	withCopyFileHook(&copyHookInput{
-		t:    t,
-		plan: plan,
-		hook: failFirstPromoteHook(&promoted),
-		run:  assertPromoteFails(t, plan, &syncInput),
-	})
-
-	assertFileExists(t, obsolete)
-}
-
 func recordingCopyHook(input *copyRecordInput) func(string, *plandomain.FileEntry) error {
 	return func(path string, entry *plandomain.FileEntry) error {
 		if strings.Contains(path, input.marker) {
@@ -668,28 +985,6 @@ func recordWriteOrder(input *writeOrderInput) []string {
 	})
 
 	return order
-}
-
-// TestApplyPlanWriteOrder verifies the expected behavior.
-func TestApplyPlanWriteOrder(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	syncInput, plan := setupPlanInput(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-
-	order := recordWriteOrder(&writeOrderInput{
-		t: t, workspace: workspace, plan: plan, syncInput: &syncInput,
-	})
-
-	lockIdx := indexOfSuffix(order, testLockFileName)
-	metaIdx := indexOfSuffix(order, testMetadataFileName)
-	moduleIdx := indexOfContains(order, config.DefaultTargetFolder+"/"+consts.Go+"/")
-
-	if lockIdx < moduleIdx || metaIdx < lockIdx {
-		t.Fatalf("expected modules before lock before metadata, got %v", order)
-	}
 }
 
 func indexOfSuffix(paths []string, suffix string) int {
@@ -750,70 +1045,10 @@ configuration_hash: abc
 	})
 }
 
-// TestBuildPlanCorruptLockFails verifies the expected behavior.
-func TestBuildPlanCorruptLockFails(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeRootTaskfile(t, workspace)
-	writeCorruptLock(t, workspace)
-
-	cfg := testConfig(workspace, mutateGoWithDocs)
-	snap := fixtureStore(t)
-
-	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: snap})
-
-	expectBuildPlanError(t, &si, errExpectedCorruptLock)
-}
-
-// TestBuildPlanCorruptMetadataFails verifies the expected behavior.
-func TestBuildPlanCorruptMetadataFails(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeRootTaskfile(t, workspace)
-	writeTaskotterMetadata(&metadataWriteInput{
-		t:            t,
-		workspace:    workspace,
-		targetFolder: config.DefaultTargetFolder,
-		meta:         []byte(testInvalidYAML),
-	})
-
-	cfg := testConfig(workspace, mutateGoWithDocs)
-	snap := fixtureStore(t)
-
-	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: snap})
-
-	expectBuildPlanError(t, &si, errExpectedCorruptMetadata)
-}
-
 func mutateGoWithDocsHashA(cfg *config.Config) {
 	mutateGoWithDocs(cfg)
 
 	cfg.ConfigurationHash = "hash-a"
-}
-
-// TestMetadataOnlyChangeMarksChanged verifies the expected behavior.
-func TestMetadataOnlyChangeMarksChanged(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	cfg, syncInput, plan := setupPlan(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocsHashA},
-	)
-
-	err := runApplyPlan(t, plan, &syncInput)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cfg.ConfigurationHash = "hash-b"
-
-	plan2 := replan(t, workspace, cfg)
-
-	if !plan2.Changed {
-		t.Fatal("expected metadata-only configuration hash change to mark plan changed")
-	}
 }
 
 func rebuildPlanWithDifferentSHA(t *testing.T, workspace string) *plandomain.Plan {
@@ -844,22 +1079,6 @@ func applyPlanAndRebuildSHA(t *testing.T, workspace string) *plandomain.Plan {
 	}
 
 	return rebuildPlanWithDifferentSHA(t, workspace)
-}
-
-// TestSHAOnlyLockChangeNotChanged verifies the expected behavior.
-func TestSHAOnlyLockChangeNotChanged(t *testing.T) {
-	t.Parallel()
-
-	plan2 := applyPlanAndRebuildSHA(t, t.TempDir())
-
-	if plan2.Changed {
-		t.Fatalf(
-			"expected no file changes when only resolved commit differs: added=%v updated=%v removed=%v",
-			plan2.Added,
-			plan2.Updated,
-			plan2.Removed,
-		)
-	}
 }
 
 func assertRemovedContains(t *testing.T, removed []string, rel string) {
@@ -951,70 +1170,6 @@ func assertIncludesDocToggleRemovesDocs(t *testing.T, workspace string, cfg *con
 	}
 
 	assertDocsRemovedFromWorkspace(t, workspace)
-}
-
-// TestConfigurationChangeMarksUpdated verifies the expected behavior.
-func TestConfigurationChangeMarksUpdated(t *testing.T) {
-	t.Parallel()
-
-	workspace, cfg := applyGoWithDocsPlan(t)
-	assertIncludesDocToggleRemovesDocs(t, workspace, cfg)
-}
-
-// TestPackageManagerSwitchSameDestination verifies the expected behavior.
-func TestPackageManagerSwitchSameDestination(t *testing.T) {
-	t.Parallel()
-
-	mods := []string{testModuleESLintNodePNPM, testModuleESLintNodeNPM, consts.EslintBun}
-
-	for i := range mods {
-		t.Run(mods[i], func(t *testing.T) {
-			t.Parallel()
-
-			assertNormalizesToEslint(t, mods[i])
-		})
-	}
-}
-
-// TestPrefixSafetyPreservesUnrelatedPaths verifies the expected behavior.
-func TestPrefixSafetyPreservesUnrelatedPaths(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	extra := filepath.Join(workspace, "taskfiles-extra", "foo.txt")
-	writeFileWithDir(t, extra, []byte("stay"))
-	writeTaskGoManagedLock(t, workspace)
-
-	cfg, syncInput, plan := setupPlan(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-	discardCfg(cfg)
-
-	assertApplyPlanPreservesPath(&preservePathInput{
-		t: t, plan: plan, syncInput: &syncInput, path: extra,
-	})
-}
-
-// TestTargetFolderMigration verifies the expected behavior.
-func TestTargetFolderMigration(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	fixture := writeOldTargetFixture(t, workspace)
-
-	cfg, syncInput, plan := setupPlan(
-		&setupPlanArgs{t: t, workspace: workspace, mutate: mutateGoWithDocs},
-	)
-	discardCfg(cfg)
-
-	err := runApplyPlan(t, plan, &syncInput)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertMigrationResult(&migrationAssertInput{
-		t: t, workspace: workspace, oldManaged: fixture.oldManaged, oldUser: fixture.oldUser,
-	})
 }
 
 func assertMigrationResult(input *migrationAssertInput) {
@@ -1143,16 +1298,6 @@ func assertCollectedWithDocs(t *testing.T, dir string) {
 		fileGoTestGo:         false,
 		testMetadataFileName: false,
 	})
-}
-
-// TestCollectModuleFilesSkipsTestsAndDocs verifies the expected behavior.
-func TestCollectModuleFilesSkipsTestsAndDocs(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeModuleFixtureFiles(t, dir)
-	assertCollectedWithDocs(t, dir)
-	assertCollectedWithoutDocs(t, dir)
 }
 
 func assertCollected(t *testing.T, contents map[string]plandomain.FileEntry, want map[string]bool) {
@@ -1325,20 +1470,6 @@ func buildNestedDocsPlanWithLeafReadme(t *testing.T) *plandomain.Plan {
 	return finishNestedDocsPlan(t, mutateNestedDocs(true), writeNestedDocsStoreWithLeafReadme(t))
 }
 
-// TestLogicalRootDocsMergedFromParent verifies the expected behavior.
-func TestLogicalRootDocsMergedFromParent(t *testing.T) {
-	t.Parallel()
-
-	withDocs := buildNestedDocsPlan(t, true)
-	assertParentReadmeCollected(t, withDocs)
-
-	withoutDocs := buildNestedDocsPlan(t, false)
-	assertNoReadmeManaged(t, withoutDocs)
-
-	collision := buildNestedDocsPlanWithLeafReadme(t)
-	assertParentReadmeCollected(t, collision)
-}
-
 func buildPlanWithLeafMetadata(t *testing.T, metadata string) error {
 	t.Helper()
 
@@ -1375,30 +1506,6 @@ func buildNestedDocsMetadataPlan(t *testing.T, storeRoot string) error {
 	}
 
 	return nil
-}
-
-// TestStoreMetadataAcceptsCurrentSchema verifies the expected behavior.
-func TestStoreMetadataAcceptsCurrentSchema(t *testing.T) {
-	t.Parallel()
-
-	err := buildPlanWithLeafMetadata(t, currentSchemaMetadata)
-	if err != nil {
-		t.Fatalf("BuildPlan with current schema: %v", err)
-	}
-}
-
-// TestStoreMetadataRejectsUnknownSchema verifies the expected behavior.
-func TestStoreMetadataRejectsUnknownSchema(t *testing.T) {
-	t.Parallel()
-
-	err := buildPlanWithLeafMetadata(t, legacySchemaMetadata)
-	if err == nil {
-		t.Fatal("expected unsupported metadata schema error")
-	}
-
-	if !strings.Contains(err.Error(), "unsupported metadata.yml schema") {
-		t.Fatalf("unexpected error: %v", err)
-	}
 }
 
 func fixtureStore(tb testing.TB) *storedomain.Snapshot {
@@ -1476,45 +1583,6 @@ func assertGeneratedRootTasks(t *testing.T, plan *plandomain.Plan) {
 	}
 }
 
-// TestBuildPlanInitialSync verifies the expected behavior.
-func TestBuildPlanInitialSync(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeRootTaskfile(t, workspace)
-
-	cfg := testConfig(workspace, mutateEslintGoPnpm)
-	plan := replan(t, workspace, cfg)
-
-	if !plan.Changed {
-		t.Fatal(errExpectedChangesInitial)
-	}
-
-	assertGeneratedRootTasks(t, plan)
-}
-
-// TestBuildPlanCreatesRootTaskfile verifies the expected behavior.
-func TestBuildPlanCreatesRootTaskfile(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	snap := fixtureStore(t)
-	cfg := testConfig(workspace, mutateGoWithDocs)
-
-	resolutions, depSources := resolveModsForTest(&moduleTestInput{t: t, cfg: cfg, snap: snap})
-	plan := buildPlanFrom(&buildPlanFromInput{
-		t: t, cfg: cfg, snap: snap, resolutions: resolutions, depSources: depSources,
-	})
-
-	if !plan.Changed {
-		t.Fatal(errExpectedChangesInitial)
-	}
-
-	if !containsRootTaskfile(plan.Added) {
-		t.Fatalf("expected root Taskfile.yml in added files, got added=%v", plan.Added)
-	}
-}
-
 func containsRootTaskfile(list []string) bool {
 	return slices.Contains(list, testTaskfileName)
 }
@@ -1575,21 +1643,6 @@ func mutateEslintPnpm(cfg *config.Config) {
 	cfg.Tasks = []string{testModuleEslint}
 	cfg.NodePackageManager = config.PMPnpm
 	cfg.IncludesDoc = true
-}
-
-// TestUnmanagedDestinationConflict verifies the expected behavior.
-func TestUnmanagedDestinationConflict(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeRootTaskfile(t, workspace)
-	writeUnmanagedFile(t, workspace)
-
-	snap := fixtureStore(t)
-	cfg := testConfig(workspace, mutateEslintPnpm)
-	si := buildEslintSyncInput(t, cfg, snap)
-
-	expectBuildPlanError(t, &si, "expected unmanaged destination conflict")
 }
 
 func mutateEslintPnpmNoDocs(cfg *config.Config) {
@@ -1704,59 +1757,6 @@ func buildEslintPlan(t *testing.T, mutate func(*config.Config)) *plandomain.Plan
 	}
 
 	return plan
-}
-
-// TestIncludesDocFalseSkipsReadme verifies the expected behavior.
-func TestIncludesDocFalseSkipsReadme(t *testing.T) {
-	t.Parallel()
-
-	assertNoReadmeManaged(t, buildEslintPlan(t, mutateEslintPnpmNoDocs))
-}
-
-// TestIncludesDocTrueIncludesEslintReadme verifies the expected behavior.
-func TestIncludesDocTrueIncludesEslintReadme(t *testing.T) {
-	t.Parallel()
-
-	assertEslintReadmeManaged(t, buildEslintPlan(t, mutateEslintPnpm))
-}
-
-// TestIncludesDocFalseSkipsFixtureDocs verifies the expected behavior.
-func TestIncludesDocFalseSkipsFixtureDocs(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeRootTaskfile(t, workspace)
-
-	cfg := testConfig(workspace, func(cfg *config.Config) {
-		cfg.Tasks = []string{consts.Go}
-		cfg.IncludesDoc = false
-	})
-	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: fixtureStore(t)})
-
-	plan, err := planpkg.BuildPlan(&si)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertNoDocPathsManaged(t, plan)
-}
-
-// TestIncludesDocTrueIncludesFixtureDocs verifies the expected behavior.
-func TestIncludesDocTrueIncludesFixtureDocs(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	writeRootTaskfile(t, workspace)
-
-	cfg := testConfig(workspace, mutateGoWithDocs)
-	si := buildSingleSyncIn(&moduleTestInput{t: t, cfg: cfg, snap: fixtureStore(t)})
-
-	plan, err := planpkg.BuildPlan(&si)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertDocPathsManaged(t, plan)
 }
 
 func fatalOnErr(t *testing.T, err error) {

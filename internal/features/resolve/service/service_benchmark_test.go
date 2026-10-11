@@ -22,62 +22,6 @@ const (
 	benchUnknownWant    = "expected unknown task to fail"
 )
 
-func benchModuleName(idx int) string {
-	return benchModulePrefix + strconv.Itoa(idx)
-}
-
-// benchCatalog builds a store catalog with plain modules plus one Node variant chain.
-func benchCatalog() map[string]struct{} {
-	catalog := make(map[string]struct{}, benchCatalogModules)
-
-	for idx := range benchCatalogModules {
-		catalog[benchModuleName(idx)] = struct{}{}
-	}
-
-	catalog[srcESLintPnpm] = struct{}{}
-
-	return catalog
-}
-
-func benchModuleNames(count int) []string {
-	names := make([]string, consts.IndexZero, count)
-
-	for idx := range count {
-		names = append(names, benchModuleName(idx))
-	}
-
-	return names
-}
-
-func benchTasks() []string {
-	return append(benchModuleNames(benchRequestedTasks), taskESLint)
-}
-
-func benchDependenciesOf(idx int) []string {
-	out := make([]string, consts.IndexZero, benchDepsFanOut)
-
-	for step := consts.IndexOne; step <= benchDepsFanOut; step++ {
-		next := idx + step
-
-		if next < benchCatalogModules {
-			out = append(out, benchModuleName(next))
-		}
-	}
-
-	return out
-}
-
-// benchDeps builds a dependency graph where every module depends on later modules.
-func benchDeps() map[string][]string {
-	deps := make(map[string][]string, benchCatalogModules)
-
-	for idx := range benchCatalogModules {
-		deps[benchModuleName(idx)] = benchDependenciesOf(idx)
-	}
-
-	return deps
-}
-
 // BenchmarkResolveAll measures resolving a full task list against a store catalog.
 func BenchmarkResolveAll(b *testing.B) {
 	input := &service.ResolveAllInput{
@@ -151,4 +95,60 @@ func BenchmarkLevenshtein(b *testing.B) {
 	for b.Loop() {
 		_ = service.Levenshtein("eslint/node/pnpm", "eslint/bun")
 	}
+}
+
+func benchModuleName(idx int) string {
+	return benchModulePrefix + strconv.Itoa(idx)
+}
+
+// benchCatalog builds a store catalog with plain modules plus one Node variant chain.
+func benchCatalog() map[string]struct{} {
+	catalog := make(map[string]struct{}, benchCatalogModules)
+
+	for idx := range benchCatalogModules {
+		catalog[benchModuleName(idx)] = struct{}{}
+	}
+
+	catalog[srcESLintPnpm] = struct{}{}
+
+	return catalog
+}
+
+func benchModuleNames(count int) []string {
+	names := make([]string, consts.IndexZero, count)
+
+	for idx := range count {
+		names = append(names, benchModuleName(idx))
+	}
+
+	return names
+}
+
+func benchTasks() []string {
+	return append(benchModuleNames(benchRequestedTasks), taskESLint)
+}
+
+func benchDependenciesOf(idx int) []string {
+	out := make([]string, consts.IndexZero, benchDepsFanOut)
+
+	for step := consts.IndexOne; step <= benchDepsFanOut; step++ {
+		next := idx + step
+
+		if next < benchCatalogModules {
+			out = append(out, benchModuleName(next))
+		}
+	}
+
+	return out
+}
+
+// benchDeps builds a dependency graph where every module depends on later modules.
+func benchDeps() map[string][]string {
+	deps := make(map[string][]string, benchCatalogModules)
+
+	for idx := range benchCatalogModules {
+		deps[benchModuleName(idx)] = benchDependenciesOf(idx)
+	}
+
+	return deps
 }
